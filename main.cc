@@ -5,6 +5,7 @@
 #include "pathfinding.h"
 #include "dist_transform.h"
 #include "AStar.hpp"
+#include "action.hpp"
 
 #include <iostream>
 #include <memory>
@@ -35,12 +36,18 @@ public:
 
     std::vector<Point3D> expansions;
     std::vector<Point3D> rankedExpansions;
+    std::vector<double> expansionOrder;
+
+    const ObservationInterface* observer;
     GameInfo game_info;
     Point3D startLocation;
     Point2DI staging_location;
+
     AStar::Generator generator;
-    std::vector<double> expansionOrder;
+
+    std::vector<Action> actionList;
     std::vector<Point2DI> pylons;
+
     map<std::string>* display;
 
     //std::vector<Point2DI> numberDisplayLoc;
@@ -48,7 +55,12 @@ public:
 
     virtual void OnGameStart() final {
         std::cout << "Hello, World!" << std::endl;
-        game_info = Observation()->GetGameInfo();
+
+        observer = Observation();
+        game_info = observer->GetGameInfo();
+
+        Action::setInterfaces(Actions(), observer);
+
         generator.setWorldSize(Point2DI(game_info.width, game_info.height));
         generator.setHeuristic(AStar::Heuristic::octagonal);
         generator.setDiagonalMovement(true);
@@ -63,7 +75,7 @@ public:
         }
 
         // Temporary, we can replace this with observation->GetStartLocation() once implemented
-        startLocation = Observation()->GetStartLocation();
+        startLocation = observer->GetStartLocation();
         if (startLocation.x > game_info.width / 2) {
             staging_location.x = startLocation.x - 3;
         } else {
@@ -77,7 +89,7 @@ public:
         }
 
         //staging_location = Point2DI(startLocation.x + ;
-        expansions = sc2::search::CalculateExpansionLocations(Observation(), Query());
+        expansions = sc2::search::CalculateExpansionLocations(observer, Query());
         for (auto point : expansions) {
             //printf("[%d,%d]->[%d,%d], ", staging_location.x, staging_location.y, ((Point2DI)point).x,
             //       ((Point2DI)point).y);
@@ -212,7 +224,7 @@ public:
 
         map<float>* dist_t = dt(pathinggrid, mapWidth, mapHeight);
 
-        Point2D center = Observation()->GetCameraPos();
+        Point2D center = observer->GetCameraPos();
         int wS = int(center.x) - 7;
         if (wS < 0)
             wS = 0;
@@ -342,3 +354,7 @@ int main(int argc, char* argv[]) {
 //per-unit micro
 //squadrons
 //combine rankedExpansions into normal expansionOrder generation
+
+
+//ERROR CODES:
+//ABILITY CODES ARE 0x01__
