@@ -5,145 +5,20 @@
 #include "pathfinding.h"
 #include "dist_transform.h"
 #include "AStar.hpp"
-//#include "action.hpp"
+#include "action.hpp"
 
 #include <iostream>
 #include <memory>
 #include <string>
 #include <stdexcept>
 #include <queue>
+#include <list>
 #include <cmath>
 
-#define PI 3.14159263
-#define PYLON_RADIUS 6.5
+constexpr auto PI = 3.14159263;
+constexpr auto PYLON_RADIUS = 6.5;
 
 using namespace sc2;
-
-
-class Action {
-public:
-
-    /* create an action */
-    Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_);
-
-    /* create an action */
-    Action(sc2::UnitTypeID unitType_, sc2::AbilityID abilityId_, const sc2::Point2D& point_);
-
-    /* create an action */
-    Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_);
-
-    /* create an action */
-    /*static void setInterfaces(sc2::ActionInterface* actionInterface_,
-                              const sc2::ObservationInterface* observationInterface_);
-
-    static void setAgent(sc2::Agent* agent_);*/
-
-    /* delete an action */
-    //~Action();
-
-    void init(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_);
-
-    void init(const sc2::Unit* unit_, sc2::AbilityID abilityId_);
-
-    void buildStructure(sc2::AbilityID abilityId_, const sc2::Point2D& point_);
-
-    bool execute(Agent* a) const;
-
-    //static sc2::ActionInterface* actionInterface;
-    //static const sc2::ObservationInterface* observationInterface;
-    sc2::AbilityID abilityId;
-    const sc2::Unit* unit;
-    sc2::UnitTypeID unitType;
-    sc2::Point2D point;
-    bool pointInitialized = false;
-    int costMinerals = 0;
-    int costVespene = 0;
-
-private:
-};
-
-/* create an action */
-Action::Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
-    unit = unit_;
-    abilityId = abilityId_;
-    point = point_;
-    pointInitialized = true;
-}
-
-/* create an action */
-Action::Action(sc2::UnitTypeID unitType_, sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
-    unitType = unitType_;
-    abilityId = abilityId_;
-    point = point_;
-    pointInitialized = true;
-}
-
-/* create an action */
-Action::Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_) {
-    unit = unit_;
-    abilityId = abilityId_;
-}
-
-/* create an action */
-//void Action::setInterfaces(sc2::ActionInterface* actionInterface_,
-//                           const sc2::ObservationInterface* observationInterface_) {
-//    actionInterface = actionInterface_;
-//    observationInterface = observationInterface_;
-//}
-
-/* delete an action */
-// Action::~Action() {
-// }
-
-void Action::init(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
-    unit = unit_;
-    abilityId = abilityId_;
-    point = point_;
-    pointInitialized = true;
-}
-
-void Action::init(const sc2::Unit* unit_, sc2::AbilityID abilityId_) {
-    unit = unit_;
-    abilityId = abilityId_;
-}
-
-void Action::buildStructure(sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
-    unitType = sc2::UNIT_TYPEID::PROTOSS_PROBE;
-    abilityId = abilityId_;
-    point = point_;
-    pointInitialized = true;
-}
-
-// bool Action::filterUnit(const Unit& unit) {
-//     return unit.unit_type == unitType;
-// }
-
-bool Action::execute(Agent *a) const {
-    if (a->Actions() == nullptr) {
-        printf("ERROR CODE 0x0101\n");
-    } else if (abilityId == 0) {
-        printf("ERROR CODE 0x0102\n");
-    } else if (unitType == 0 && unit == nullptr) {
-        printf("ERROR CODE 0x0103\n");
-    } else {
-        if (unitType != 0) {
-            sc2::Units units = a->Observation()->GetUnits(sc2::Unit::Alliance::Self);
-            sc2::Units possibleUnits;
-            for (auto u : units) {
-                if (u->unit_type == unitType) {
-                    possibleUnits.push_back(u);
-                }
-            }
-            // unit =
-        }
-        if (pointInitialized) {
-            a->Actions()->UnitCommand(unit, abilityId, point, false);
-        } else {
-            a->Actions()->UnitCommand(unit, abilityId, false);
-        }
-    }
-    return true;
-}
 
 class Bot : public Agent {
 public:
@@ -159,7 +34,7 @@ public:
 
     AStar::Generator generator;
 
-    std::vector<Action> actionList;
+    std::list<Action> actionList;
     std::vector<Point2DI> pylons;
 
     map<std::string>* display;
@@ -325,9 +200,10 @@ public:
             pylons.push_back(ans1);
             //pylons.push_back(ans2);
         }
-        Action act(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
+        //Action act(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
         //act.buildStructure();
-        actionList.push_back(act);
+        //actionList.push_back(act);
+        actionList.emplace_back(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
         //pylons.push_back(wallOffPylonPath[5]);
     }
 
@@ -382,51 +258,60 @@ public:
                     c.g = 125;
                     c.b = 220;
                 } else if (std::find(path.begin(), path.end(), point) != path.end()) {
-                    c.r = 15;
-                    c.g = 25;
+                    c.r = 115;
+                    c.g = 125;
                     c.b = 220;
-                } else if (placementgrid.IsPlacable(point)) {
+                } else if (0 && placementgrid.IsPlacable(point)) {
                     c.r = 15;
                     c.g = 220;
                     c.b = 25;
-                } else if (pathinggrid.IsPathable(point)) {
+                } else if (0 && pathinggrid.IsPathable(point)) {
                     c.r = 220;
                     c.g = 65;
                     c.b = 25;
                 }
-
-                float height = heightmap.TerrainHeight(point);
-                Debug()->DebugBoxOut(Point3D(w, h, height + 0.01), Point3D(w + 1, h + 1, height + boxHeight), c);
-                Debug()->DebugTextOut(strprintf("%d, %d", w, h), Point3D(w, h, height + 0.1), Color(200, 90, 15),
-                                      fontSize);
-                // std::string cs = strprintf("%3.1f", height);
-                //std::string cs = strprintf("%3.1f", imRef(dist_t, w, h));
-                //if (std::find(expansions.begin(), expansions.end(), point) != expansions.end())
-                //for (int i = 0; i < expansions.size(); i++) {
-                //    if (Point2DI(expansions[i]) == point) {
-                //        std::string cs = strprintf("%3.1f", expansionOrder[i]);
-                //        float disp = cs.length() * 0.0667 * fontSize / 15;
-                //        Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1), Color(200, 190, 115),
-                //                              fontSize);
-                //    }
-                //}
-                std::string cs = imRef(display, w, h);
-                float disp = cs.length() * 0.0667 * fontSize / 15;
-                Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1), Color(200, 190,115),
-                    fontSize);
+                #define BOX_BORDER 0.02
+                if (!(c.r == 255 && c.g == 255 && c.b == 255)){
+                    float height = heightmap.TerrainHeight(point);
+                    Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
+                                         Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
+                    Debug()->DebugTextOut(strprintf("%d, %d", w, h),
+                                          Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
+                                          Color(200, 90, 15),
+                                          fontSize);
+                    std::string cs = imRef(display, w, h);
+                    float disp = cs.length() * 0.0667 * fontSize / 15;
+                    Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1), Color(200, 190, 115),
+                                          fontSize);
+                }
             }
         }
         
     }
 
     void actions() {
-        for (int i = 0; i < actionList.size(); i++) {
+        int i = 0;
+        for (auto it = actionList.begin(); it != actionList.end(); ++it){
+            std::string cs =
+                strprintf("%d %s %s [%d, %d]\n", i, 
+                it->unitType != 0 ? UnitTypeToName(it->unitType) : UnitTypeToName(it->unit->unit_type),
+                          AbilityTypeToName(it->abilityId), it->point.x, it->point.y);
+            Debug()->DebugTextOut(cs, Point2D(0, i * 11), Color(255, 255, 255), 10);
+            //printf("%s", cs.c_str());
+            i++;
+        }
+        /*for (int i = 0; i < actionList.size(); i++) {
             std::string cs = strprintf("%s %s [%d, %d]\n",
                                        actionList[i].unitType != 0 ? UnitTypeToName(actionList[i].unitType)
                                                                    : UnitTypeToName(actionList[i].unit->unit_type),
                           AbilityTypeToName(actionList[i].abilityId), actionList[i].point.x, actionList[i].point.y);
-            Debug()->DebugTextOut(cs, Point2D(0, i * 11), Color(255,255,255), 10);
-        }
+            Debug()->DebugTextOut(cs, Point2D(4, 4 + i * 11), Color(255,255,255), 10);
+        }*/
+    }
+
+    void actionQueue(){
+        Action a = actionList.front();
+        a.execute(this);
     }
 
     virtual void OnStep() final {
@@ -435,6 +320,7 @@ public:
         grid();
         actions();
         Debug()->SendDebug();
+        actionQueue();
     }
 
     virtual void OnUnitIdle(const Unit* unit) final {
