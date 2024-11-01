@@ -5,7 +5,7 @@
 #include "pathfinding.h"
 #include "dist_transform.h"
 #include "AStar.hpp"
-#include "action.hpp"
+//#include "action.hpp"
 
 #include <iostream>
 #include <memory>
@@ -19,16 +19,130 @@
 
 using namespace sc2;
 
-template <typename... Args>
-std::string strprintf(const std::string& format, Args... args) {
-    int size_s = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;  // Extra space for '\0'
-    if (size_s <= 0) {
-        throw std::runtime_error("Error during formatting.");
+
+class Action {
+public:
+
+    /* create an action */
+    Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_);
+
+    /* create an action */
+    Action(sc2::UnitTypeID unitType_, sc2::AbilityID abilityId_, const sc2::Point2D& point_);
+
+    /* create an action */
+    Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_);
+
+    /* create an action */
+    /*static void setInterfaces(sc2::ActionInterface* actionInterface_,
+                              const sc2::ObservationInterface* observationInterface_);
+
+    static void setAgent(sc2::Agent* agent_);*/
+
+    /* delete an action */
+    //~Action();
+
+    void init(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_);
+
+    void init(const sc2::Unit* unit_, sc2::AbilityID abilityId_);
+
+    void buildStructure(sc2::AbilityID abilityId_, const sc2::Point2D& point_);
+
+    bool execute(Agent* a) const;
+
+    //static sc2::ActionInterface* actionInterface;
+    //static const sc2::ObservationInterface* observationInterface;
+    sc2::AbilityID abilityId;
+    const sc2::Unit* unit;
+    sc2::UnitTypeID unitType;
+    sc2::Point2D point;
+    bool pointInitialized = false;
+    int costMinerals = 0;
+    int costVespene = 0;
+
+private:
+};
+
+/* create an action */
+Action::Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
+    unit = unit_;
+    abilityId = abilityId_;
+    point = point_;
+    pointInitialized = true;
+}
+
+/* create an action */
+Action::Action(sc2::UnitTypeID unitType_, sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
+    unitType = unitType_;
+    abilityId = abilityId_;
+    point = point_;
+    pointInitialized = true;
+}
+
+/* create an action */
+Action::Action(const sc2::Unit* unit_, sc2::AbilityID abilityId_) {
+    unit = unit_;
+    abilityId = abilityId_;
+}
+
+/* create an action */
+//void Action::setInterfaces(sc2::ActionInterface* actionInterface_,
+//                           const sc2::ObservationInterface* observationInterface_) {
+//    actionInterface = actionInterface_;
+//    observationInterface = observationInterface_;
+//}
+
+/* delete an action */
+// Action::~Action() {
+// }
+
+void Action::init(const sc2::Unit* unit_, sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
+    unit = unit_;
+    abilityId = abilityId_;
+    point = point_;
+    pointInitialized = true;
+}
+
+void Action::init(const sc2::Unit* unit_, sc2::AbilityID abilityId_) {
+    unit = unit_;
+    abilityId = abilityId_;
+}
+
+void Action::buildStructure(sc2::AbilityID abilityId_, const sc2::Point2D& point_) {
+    unitType = sc2::UNIT_TYPEID::PROTOSS_PROBE;
+    abilityId = abilityId_;
+    point = point_;
+    pointInitialized = true;
+}
+
+// bool Action::filterUnit(const Unit& unit) {
+//     return unit.unit_type == unitType;
+// }
+
+bool Action::execute(Agent *a) const {
+    if (a->Actions() == nullptr) {
+        printf("ERROR CODE 0x0101\n");
+    } else if (abilityId == 0) {
+        printf("ERROR CODE 0x0102\n");
+    } else if (unitType == 0 && unit == nullptr) {
+        printf("ERROR CODE 0x0103\n");
+    } else {
+        if (unitType != 0) {
+            sc2::Units units = a->Observation()->GetUnits(sc2::Unit::Alliance::Self);
+            sc2::Units possibleUnits;
+            for (auto u : units) {
+                if (u->unit_type == unitType) {
+                    possibleUnits.push_back(u);
+                }
+            }
+            // unit =
+        }
+        if (pointInitialized) {
+            a->Actions()->UnitCommand(unit, abilityId, point, false);
+        } else {
+            a->Actions()->UnitCommand(unit, abilityId, false);
+        }
     }
-    auto size = static_cast<size_t>(size_s);
-    std::unique_ptr<char[]> buf(new char[size]);
-    std::snprintf(buf.get(), size, format.c_str(), args...);
-    return std::string(buf.get(), buf.get() + size - 1);  // We don't want the '\0' inside
+    return true;
 }
 
 class Bot : public Agent {
@@ -53,13 +167,25 @@ public:
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
 
+    template <typename... Args>
+    std::string strprintf(const std::string& format, Args... args) {
+        int size_s = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;  // Extra space for '\0'
+        if (size_s <= 0) {
+            throw std::runtime_error("Error during formatting.");
+        }
+        auto size = static_cast<size_t>(size_s);
+        std::unique_ptr<char[]> buf(new char[size]);
+        std::snprintf(buf.get(), size, format.c_str(), args...);
+        return std::string(buf.get(), buf.get() + size - 1);  // We don't want the '\0' inside
+    }
+
     virtual void OnGameStart() final {
         std::cout << "Hello, World!" << std::endl;
 
         observer = Observation();
         game_info = observer->GetGameInfo();
 
-        Action::setInterfaces(Actions(), observer);
+        //Action::setInterfaces(Actions(), observer);
 
         generator.setWorldSize(Point2DI(game_info.width, game_info.height));
         generator.setHeuristic(AStar::Heuristic::octagonal);
@@ -194,13 +320,15 @@ public:
         Point2D ans2(center.x - root * (end1.y - end2.y), center.y - root * (end2.x - end1.x));
         if (Distance2D(ans1, rankedExpansions[0]) > Distance2D(ans2, rankedExpansions[0])) {
             pylons.push_back(ans2);
-            pylons.push_back(ans1);
+            //pylons.push_back(ans1);
         } else {
             pylons.push_back(ans1);
-            pylons.push_back(ans2);
+            //pylons.push_back(ans2);
         }
-
-        pylons.push_back(wallOffPylonPath[5]);
+        Action act(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
+        //act.buildStructure();
+        actionList.push_back(act);
+        //pylons.push_back(wallOffPylonPath[5]);
     }
 
     void grid() {
@@ -288,11 +416,25 @@ public:
                     fontSize);
             }
         }
-        Debug()->SendDebug();
+        
+    }
+
+    void actions() {
+        for (int i = 0; i < actionList.size(); i++) {
+            std::string cs = strprintf("%s %s [%d, %d]\n",
+                                       actionList[i].unitType != 0 ? UnitTypeToName(actionList[i].unitType)
+                                                                   : UnitTypeToName(actionList[i].unit->unit_type),
+                          AbilityTypeToName(actionList[i].abilityId), actionList[i].point.x, actionList[i].point.y);
+            Debug()->DebugTextOut(cs, Point2D(0, i * 11), Color(255,255,255), 10);
+        }
     }
 
     virtual void OnStep() final {
+        const UnitTypes unit_data = observer->GetUnitTypeData();
+        UnitTypeData probe_data = unit_data.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
         grid();
+        actions();
+        Debug()->SendDebug();
     }
 
     virtual void OnUnitIdle(const Unit* unit) final {
