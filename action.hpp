@@ -4,7 +4,7 @@
 #include <sc2api/sc2_api.h>
 #include "sc2lib/sc2_lib.h"
 #include <sc2api/sc2_interfaces.h>
-#include "constants.h"
+#include "orderQueue.hpp"
 
 using namespace sc2;
 
@@ -147,21 +147,35 @@ bool Action::execute(sc2::Agent* a) {
             UnitTypeID building = abilityIDToUnitID(abilityId);
             sc2::UnitTypeData building_stats = unit_data.at(static_cast<uint32_t>(building));
 
-            printf("%d->%d, %d->%d\n", building_stats.mineral_cost, int(a->Observation()->GetMinerals() + dist * unit_stats.movement_speed * MINERALS_PER_PROBE_PER_SEC), building_stats.vespene_cost, int(a->Observation()->GetVespene() + dist * unit_stats.movement_speed * VESPENE_PER_PROBE_PER_SEC));
+            int theoreticalMinerals = a->Observation()->GetMinerals();//+(dist / unit_stats.movement_speed) * MINERALS_PER_PROBE_PER_SEC * 12;
+            int theoreticalVespene = a->Observation()->GetMinerals();//+(dist / unit_stats.movement_speed) * MINERALS_PER_PROBE_PER_SEC * 0;
+
+            printf("%d->%d, %d->%d\n", building_stats.mineral_cost, theoreticalMinerals, building_stats.vespene_cost,
+                   theoreticalVespene);
             
             //int mineralCost = building_stats.mineral_cost;
-            if (!(building_stats.mineral_cost < (a->Observation()->GetMinerals() + (dist / unit_stats.movement_speed) * MINERALS_PER_PROBE_PER_SEC)) ||
-                !(building_stats.vespene_cost < (a->Observation()->GetVespene() + (dist / unit_stats.movement_speed) * VESPENE_PER_PROBE_PER_SEC))) {
+            if (!(building_stats.mineral_cost < theoreticalMinerals) ||
+                !(building_stats.vespene_cost < theoreticalVespene)) {
                 return false;
             }
-            
             const Unit *prevTarget = a->Observation()->GetUnit(un->orders[0].target_unit_tag);
-            AbilityID prevAction = un->orders[0].ability_id;
+            //AbilityID prevAction = un->orders[0].ability_id;
 
-            printf("%s, %s\n", UnitTypeToName(prevTarget->unit_type), AbilityTypeToName(prevAction));
+            //printf("%s, %s\n", UnitTypeToName(prevTarget->unit_type), AbilityTypeToName(prevOrder.ability_id));
 
-            a->Actions()->UnitCommand(un, abilityId, point, false);
-            a->Actions()->UnitCommand(un, prevAction, prevTarget, true);
+            //a->Actions()->UnitCommand(un, abilityId, point, false);
+            //a->Actions()->UnitCommand(un, prevAction, prevTarget, true);
+            if (un->orders.size() > 0) {
+                UnitOrder prevOrder = un->orders[0];
+                a->Actions()->UnitCommand(un, ABILITY_ID::STOP, false);
+                OrderQueue::add(un, {ABILITY_ID::MOVE_MOVE, NullTag, point});
+                OrderQueue::add(un, {abilityId, NullTag, point});
+                OrderQueue::add(un, prevOrder);
+            } else {
+                OrderQueue::add(un, {ABILITY_ID::MOVE_MOVE, NullTag, point});
+                OrderQueue::add(un, {abilityId, NullTag, point});
+            }
+            return true;
         } else {
             if (pointInitialized) {
                 a->Actions()->UnitCommand(unit, abilityId, point, false);

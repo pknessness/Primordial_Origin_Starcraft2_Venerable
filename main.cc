@@ -20,8 +20,15 @@ constexpr auto PYLON_RADIUS = 6.5;
 
 using namespace sc2;
 
+typedef std::list<UnitOrder> UnitOrders;
+typedef std::map<uint64_t, UnitOrders> AllUnitOrders;
+
 class Bot : public Agent {
 public:
+
+    Bot() {
+        
+    }
 
     std::vector<Point3D> expansions;
     std::vector<Point3D> rankedExpansions;
@@ -296,7 +303,7 @@ public:
                 strprintf("%d %s %s [%d, %d]\n", i, 
                 it->unitType != 0 ? UnitTypeToName(it->unitType) : UnitTypeToName(it->unit->unit_type),
                           AbilityTypeToName(it->abilityId), it->point.x, it->point.y);
-            Debug()->DebugTextOut(cs, Point2D(0, i * 11), Color(255, 255, 255), 10);
+            Debug()->DebugTextOut(cs, Point2D(4, 4 + (i * 11)), Color(255, 255, 255), 10);
             //printf("%s", cs.c_str());
             i++;
         }
@@ -309,16 +316,62 @@ public:
         }*/
     }
 
-    void actionQueue(){
-        Action a = actionList.front();
-        a.execute(this);
+    void orders() {
+        /*Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        for (const Unit *unit : units) {
+            std::vector<UnitOrder> orders = unit->orders;
+            std::string s = "";
+            for (UnitOrder order : orders) {
+                s.append(AbilityTypeToName(order.ability_id));
+                s.append(", ");
+                if (order.target_unit_tag != NullTag) {
+                    s.append(strprintf("[%lu]", order.target_unit_tag));
+                }
+                s.append(" ");
+                if (order.target_pos != Point2D(0,0)) {
+                    s.append(strprintf("[%d,%d]", order.target_pos.x, order.target_pos.y));
+                }
+                s.append("%.2f\n", order.progress);
+            }
+            Debug()->DebugTextOut(s, unit->pos, Color(200, 190, 115), 8);
+        }*/
+        
+        Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        for (const Unit* unit : units) {
+            int i = 0;
+            UnitOrders all = OrderQueue::getAllOrders()[unit->tag];
+            std::string cs = "";
+            for (auto it = all.begin(); it != all.end();
+                 ++it) {
+                cs.append(
+                    strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it->ability_id),
+                                           it->target_unit_tag, it->target_pos.x, it->target_pos.y, it->progress));
+                //printf("%s", cs.c_str());
+                Debug()->DebugTextOut(cs, unit->pos, Color(200, 190, 115), 8);
+            }
+        }
+        
     }
+
+    void actionQueue(){
+        if (actionList.size() > 0) {
+            Action a = actionList.front();
+            if (a.execute(this)) {
+                actionList.pop_front();
+            }
+        }
+    }
+
+    /*void orderQueue() {
+        OrderQueue::allOrders
+    }*/
 
     virtual void OnStep() final {
         const UnitTypes unit_data = observer->GetUnitTypeData();
         UnitTypeData probe_data = unit_data.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
         grid();
         actions();
+        orders();
         Debug()->SendDebug();
         actionQueue();
     }
@@ -331,13 +384,14 @@ public:
                 //Debug()->DebugTextOut("TRAIN_PROBE");
                 break;
             }
-            case UNIT_TYPEID::PROTOSS_PROBE: {
-                // Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, Observation()->GetCameraPos(), false);
-                Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER);
-                //Debug()->DebugTextOut("HARVEST_GATHER");
-                break;
-            }
+            //case UNIT_TYPEID::PROTOSS_PROBE: {
+            //    // Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, Observation()->GetCameraPos(), false);
+            //    Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER);
+            //    //Debug()->DebugTextOut("HARVEST_GATHER");
+            //    break;
+            //}
             default: {
+                OrderQueue::execute(unit, this);
                 break;
             }
         }
