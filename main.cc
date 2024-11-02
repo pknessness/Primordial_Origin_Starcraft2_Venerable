@@ -2,10 +2,10 @@
 //#include "sc2api/sc2_unit_filters.h"
 #include "sc2lib/sc2_lib.h"
 //#include "dt.h"
+
 #include "pathfinding.h"
 #include "dist_transform.h"
 #include "AStar.hpp"
-#include "action.hpp"
 
 #include <iostream>
 #include <memory>
@@ -14,22 +14,17 @@
 #include <queue>
 #include <list>
 #include <cmath>
+#include "actionQueue.hpp"
+#include "probes.hpp"
+
 
 constexpr auto PI = 3.14159263;
 constexpr auto PYLON_RADIUS = 6.5;
 
 using namespace sc2;
 
-typedef std::list<UnitOrder> UnitOrders;
-typedef std::map<uint64_t, UnitOrders> AllUnitOrders;
-
 class Bot : public Agent {
 public:
-
-    Bot() {
-        
-    }
-
     std::vector<Point3D> expansions;
     std::vector<Point3D> rankedExpansions;
     std::vector<double> expansionOrder;
@@ -41,13 +36,51 @@ public:
 
     AStar::Generator generator;
 
-    std::list<Action> actionList;
     std::vector<Point2DI> pylons;
+
+    std::map<uint64_t, int> mineralTargetting;
 
     map<std::string>* display;
 
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
+
+    const Unit* FindNearestMineralPatch(const Point2D& start) {
+        Units units = Observation()->GetUnits(Unit::Alliance::Neutral);
+        float distance = std::numeric_limits<float>::max();
+        const Unit* target = nullptr;
+        for (const auto& u : units) {
+            if (u->unit_type == UNIT_TYPEID::NEUTRAL_MINERALFIELD ||
+                u->unit_type == UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
+                if (mineralTargetting.find(u->tag) != mineralTargetting.end() && mineralTargetting[u->tag] >= 2) {
+                    continue;
+                } else {
+                    if (mineralTargetting.find(u->tag) == mineralTargetting.end()) {
+                        mineralTargetting[u->tag] = 0;
+                    }
+                    for (auto it = probes.begin(); it != probes.end(); it++) {
+                        if (it->second.minerals == u->tag) {
+                            mineralTargetting[u->tag] += 1;
+                        }
+
+                        if (mineralTargetting[u->tag] >= 2) {
+                            continue;
+                        }
+                    }
+                }
+                float d = DistanceSquared2D(u->pos, start);
+                if (d < distance) {
+                    distance = d;
+                    target = u;
+                }
+            }
+        }
+        // If we never found one return false;
+        if (distance == std::numeric_limits<float>::max()) {
+            return target;
+        }
+        return target;
+    }
 
     template <typename... Args>
     std::string strprintf(const std::string& format, Args... args) {
@@ -202,16 +235,30 @@ public:
         Point2D ans2(center.x - root * (end1.y - end2.y), center.y - root * (end2.x - end1.x));
         if (Distance2D(ans1, rankedExpansions[0]) > Distance2D(ans2, rankedExpansions[0])) {
             pylons.push_back(ans2);
-            //pylons.push_back(ans1);
         } else {
             pylons.push_back(ans1);
-            //pylons.push_back(ans2);
         }
-        //Action act(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
-        //act.buildStructure();
-        //actionList.push_back(act);
-        actionList.emplace_back(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
-        //pylons.push_back(wallOffPylonPath[5]);
+
+        sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        const sc2::Unit* un;
+        for (auto u : units) {
+            if (u->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
+                probes[u->tag] = Probe();
+            }
+            Actions()->UnitCommand(u, ABILITY_ID::STOP, false);
+        }
+
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            const Unit* mineral_target = FindNearestMineralPatch(observer->GetUnit(it->first)->pos);
+            if (!mineral_target) {
+                break;
+            }
+            it->second.init(mineral_target->tag);
+        }
+
+        MacroQueue::add(UNIT_TYPEID::PROTOSS_PROBE,
+                        {ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x, pylons[0].y)}, {100,0,0});
+        //TODO: actionList.emplace_back(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
     }
 
     void grid() {
@@ -296,70 +343,44 @@ public:
         
     }
 
-    void actions() {
-        int i = 0;
-        for (auto it = actionList.begin(); it != actionList.end(); ++it){
-            std::string cs =
-                strprintf("%d %s %s [%d, %d]\n", i, 
-                it->unitType != 0 ? UnitTypeToName(it->unitType) : UnitTypeToName(it->unit->unit_type),
-                          AbilityTypeToName(it->abilityId), it->point.x, it->point.y);
-            Debug()->DebugTextOut(cs, Point2D(4, 4 + (i * 11)), Color(255, 255, 255), 10);
-            //printf("%s", cs.c_str());
-            i++;
-        }
-        /*for (int i = 0; i < actionList.size(); i++) {
-            std::string cs = strprintf("%s %s [%d, %d]\n",
-                                       actionList[i].unitType != 0 ? UnitTypeToName(actionList[i].unitType)
-                                                                   : UnitTypeToName(actionList[i].unit->unit_type),
-                          AbilityTypeToName(actionList[i].abilityId), actionList[i].point.x, actionList[i].point.y);
-            Debug()->DebugTextOut(cs, Point2D(4, 4 + i * 11), Color(255,255,255), 10);
-        }*/
-    }
-
     void orders() {
-        /*Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
-        for (const Unit *unit : units) {
-            std::vector<UnitOrder> orders = unit->orders;
-            std::string s = "";
-            for (UnitOrder order : orders) {
-                s.append(AbilityTypeToName(order.ability_id));
-                s.append(", ");
-                if (order.target_unit_tag != NullTag) {
-                    s.append(strprintf("[%lu]", order.target_unit_tag));
-                }
-                s.append(" ");
-                if (order.target_pos != Point2D(0,0)) {
-                    s.append(strprintf("[%d,%d]", order.target_pos.x, order.target_pos.y));
-                }
-                s.append("%.2f\n", order.progress);
-            }
-            Debug()->DebugTextOut(s, unit->pos, Color(200, 190, 115), 8);
-        }*/
-        
-        Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
-        for (const Unit* unit : units) {
-            int i = 0;
-            UnitOrders all = OrderQueue::getAllOrders()[unit->tag];
+        //Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        //for (const Unit* unit : units) {
+        //    int i = 0;
+        //    UnitOrders all = OrderQueue::getAllOrders()[unit->tag];
+        //    std::string cs = "";
+        //    for (auto it = all.begin(); it != all.end(); ++it) {
+        //        cs.append(strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it->ability_id), it->target_unit_tag,
+        //                            it->target_pos.x, it->target_pos.y, it->progress));
+        //        // printf("%s", cs.c_str());
+        //        Debug()->DebugTextOut(cs, unit->pos, Color(200, 190, 115), 8);
+        //    }
+        //}
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            auto all = it->second.buildings;
+            
             std::string cs = "";
-            for (auto it = all.begin(); it != all.end();
-                 ++it) {
-                cs.append(
-                    strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it->ability_id),
-                                           it->target_unit_tag, it->target_pos.x, it->target_pos.y, it->progress));
-                //printf("%s", cs.c_str());
-                Debug()->DebugTextOut(cs, unit->pos, Color(200, 190, 115), 8);
+            if (observer->GetUnit(it->first)->orders.size() > 0) {
+                UnitOrder o = observer->GetUnit(it->first)->orders[0];
+                cs.append(strprintf("CUR: %s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(o.ability_id), o.target_unit_tag,
+                                    o.target_pos.x, o.target_pos.y, o.progress));
+            }
+            
+            for (auto it2 = all.begin(); it2 != all.end(); ++it2) {
+                cs.append(strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it2->ability_id),
+                it2->target_unit_tag,
+                                    it2->target_pos.x, it2->target_pos.y, it2->progress));
+                // printf("%s", cs.c_str());
+                Debug()->DebugTextOut(cs, observer->GetUnit(it->first)->pos, Color(200, 190, 115), 8);
             }
         }
-        
     }
 
-    void actionQueue(){
-        if (actionList.size() > 0) {
-            Action a = actionList.front();
-            if (a.execute(this)) {
-                actionList.pop_front();
-            }
-        }
+    void mineralLines() {
+        /*for (auto it = probes.begin(); it != probes.end(); it++) {
+            Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos, observer->GetUnit(it->first)->pos,
+                                  Color(200, 190, 115));
+        }*/
     }
 
     /*void orderQueue() {
@@ -370,10 +391,10 @@ public:
         const UnitTypes unit_data = observer->GetUnitTypeData();
         UnitTypeData probe_data = unit_data.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
         grid();
-        actions();
         orders();
+        mineralLines();
         Debug()->SendDebug();
-        actionQueue();
+        MacroQueue::execute(this);
     }
 
     virtual void OnUnitIdle(const Unit* unit) final {
@@ -384,14 +405,14 @@ public:
                 //Debug()->DebugTextOut("TRAIN_PROBE");
                 break;
             }
-            //case UNIT_TYPEID::PROTOSS_PROBE: {
-            //    // Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, Observation()->GetCameraPos(), false);
-            //    Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER);
-            //    //Debug()->DebugTextOut("HARVEST_GATHER");
-            //    break;
-            //}
+            case UNIT_TYPEID::PROTOSS_PROBE: {
+                // Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, Observation()->GetCameraPos(), false);
+                //Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER);
+                //Debug()->DebugTextOut("HARVEST_GATHER");
+                probes[unit->tag].execute(unit, this);
+                break;
+            }
             default: {
-                OrderQueue::execute(unit, this);
                 break;
             }
         }
