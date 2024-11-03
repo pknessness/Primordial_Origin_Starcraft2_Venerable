@@ -8,6 +8,7 @@
 #include <map>
 #include <list>
 #include "probes.hpp"
+#include "constants.h"
 
 using namespace sc2;
 
@@ -16,11 +17,6 @@ constexpr auto VESPENE_PER_PROBE_PER_SEC = 61.0 / 60;
 
 //typedef std::list<UnitOrder> UnitOrders;
 //typedef std::map<uint64_t, UnitOrders> AllUnitOrders;
-typedef struct {
-    int minerals = 0;
-    int vespene = 0;
-    int energy = 0;
-} Cost;
 
 namespace MacroQueue {
 
@@ -35,6 +31,13 @@ namespace MacroQueue {
         return true;
 	}
 
+    static bool addBuilding(UnitOrder order, Agent *agent) {
+        unitTypes.push_back(UNIT_TYPEID::PROTOSS_PROBE);
+        actions.push_back(order);
+        costs.push_back(Aux::buildAbilityToCost(order.ability_id, agent));
+        return true;
+    }
+
     static bool execute(Agent *agent) {
         int theoreticalMinerals = agent->Observation()->GetMinerals();
         int theoreticalVespene = agent->Observation()->GetVespene();
@@ -46,12 +49,12 @@ namespace MacroQueue {
         UnitOrder action = actions.front();
         UnitTypeID unitType = unitTypes.front();
 
-        int numMineralMiners = 0;
+        int numMineralMiners = -1;
         int numVespeneMiners = 0;
         for (auto it = probes.begin(); it != probes.end(); it++) {
             if (Probe::isMineral(*agent->Observation()->GetUnit(it->second.minerals))) {
                 numMineralMiners ++;
-            }else if (Probe::isMineral(*agent->Observation()->GetUnit(it->second.minerals))) {
+            }else if (Probe::isAssimilator(*agent->Observation()->GetUnit(it->second.minerals))) {
                 numVespeneMiners++;
             }
         }
@@ -61,7 +64,7 @@ namespace MacroQueue {
         if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
             double dist = -1;
             for (auto u : units) {
-                if (u->unit_type == unitType) {
+                if (u->unit_type == unitType && Probe::isMineral(*agent->Observation()->GetUnit(probes[u->tag].minerals))) {
                     double d = agent->Query()->PathingDistance(u, action.target_pos);
                     if (dist == -1 || dist > d) {
                         // possibleUnits.push_back(u);
@@ -82,11 +85,12 @@ namespace MacroQueue {
 
         if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
             double dist = agent->Query()->PathingDistance(un, action.target_pos);
-            const sc2::UnitTypes unit_data = agent->Observation()->GetUnitTypeData();
-            sc2::UnitTypeData unit_stats = unit_data.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
+            sc2::UnitTypeData unit_stats =
+                agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
             theoreticalMinerals += (dist / unit_stats.movement_speed) * MINERALS_PER_PROBE_PER_SEC * numMineralMiners;
             theoreticalVespene += (dist / unit_stats.movement_speed) * VESPENE_PER_PROBE_PER_SEC * numVespeneMiners;
         }
+        printf("%d/%d %d/%d\n", theoreticalMinerals, cost.minerals, theoreticalVespene, cost.vespene);
 
         if (cost.minerals <= theoreticalMinerals && cost.vespene <= theoreticalVespene) {
             if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {

@@ -256,8 +256,7 @@ public:
             it->second.init(mineral_target->tag);
         }
 
-        MacroQueue::add(UNIT_TYPEID::PROTOSS_PROBE,
-                        {ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x, pylons[0].y)}, {100,0,0});
+        //MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x, pylons[0].y)}, this);
         //TODO: actionList.emplace_back(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
     }
 
@@ -424,6 +423,15 @@ public:
         //tags();
         Debug()->SendDebug();
         MacroQueue::execute(this);
+        //Debug()->DebugTextOut(strprintf("%d", observer->GetGameLoop()));
+        switch (observer->GetGameLoop()) {
+            case (60):
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x, pylons[0].y)}, this);
+                break;
+            default:
+                break;
+        }
+            
     }
 
     virtual void OnUnitIdle(const Unit* unit) final {
@@ -438,6 +446,7 @@ public:
                 // Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, Observation()->GetCameraPos(), false);
                 //Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER);
                 //Debug()->DebugTextOut("HARVEST_GATHER");
+                //printf("IDLE");
                 probes[unit->tag].execute(unit, this);
                 break;
             }

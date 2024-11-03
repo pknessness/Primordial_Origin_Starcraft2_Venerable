@@ -3,6 +3,7 @@
 
 #include <sc2api/sc2_api.h>
 #include <sc2api/sc2_interfaces.h>
+#include "constants.h"
 
 using namespace sc2;
 
@@ -37,6 +38,15 @@ public:
 
     bool execute(const Unit *unit, Agent *agent) {
         if (buildings.size() != 0) {
+            Cost c = Aux::buildAbilityToCost(
+                buildings.front().ability_id, agent);
+            //printf("BuildAction: %d/%d %d/%d\n", agent->Observation()->GetMinerals(), c.minerals,
+            //       agent->Observation()->GetVespene(), c.vespene);
+            if (agent->Observation()->GetMinerals() < c.minerals ||
+                agent->Observation()->GetVespene() < c.vespene) {
+                agent->Actions()->UnitCommand(unit, ABILITY_ID::STOP, false);
+                return false;
+            }
             if (buildings.front().target_unit_tag == NullTag) {
                 agent->Actions()->UnitCommand(unit, buildings.front().ability_id, buildings.front().target_pos, false);
             } else {

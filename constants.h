@@ -1,3 +1,65 @@
+#pragma once
+
+#include <sc2api/sc2_api.h>
+#include <sc2api/sc2_interfaces.h>
+
+using namespace sc2;
+
+typedef struct {
+    unsigned int minerals = 0;
+    unsigned int vespene = 0;
+    unsigned int energy = 0;
+} Cost;
+
+namespace Aux {
+static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {
+    switch (uint32_t(build_ability)) {
+        case (uint32_t(ABILITY_ID::BUILD_ASSIMILATOR)):
+            return UNIT_TYPEID::PROTOSS_ASSIMILATOR;
+        case (uint32_t(ABILITY_ID::BUILD_CYBERNETICSCORE)):
+            return UNIT_TYPEID::PROTOSS_CYBERNETICSCORE;
+        case (uint32_t(ABILITY_ID::BUILD_DARKSHRINE)):
+            return UNIT_TYPEID::PROTOSS_DARKSHRINE;
+        case (uint32_t(ABILITY_ID::BUILD_FLEETBEACON)):
+            return UNIT_TYPEID::PROTOSS_FLEETBEACON;
+        case (uint32_t(ABILITY_ID::BUILD_FORGE)):
+            return UNIT_TYPEID::PROTOSS_FORGE;
+        case (uint32_t(ABILITY_ID::BUILD_GATEWAY)):
+            return UNIT_TYPEID::PROTOSS_GATEWAY;
+        case (uint32_t(ABILITY_ID::BUILD_NEXUS)):
+            return UNIT_TYPEID::PROTOSS_NEXUS;
+        case (uint32_t(ABILITY_ID::BUILD_PHOTONCANNON)):
+            return UNIT_TYPEID::PROTOSS_PHOTONCANNON;
+        case (uint32_t(ABILITY_ID::BUILD_PYLON)):
+            return UNIT_TYPEID::PROTOSS_PYLON;
+        case (uint32_t(ABILITY_ID::BUILD_ROBOTICSBAY)):
+            return UNIT_TYPEID::PROTOSS_ROBOTICSBAY;
+        case (uint32_t(ABILITY_ID::BUILD_ROBOTICSFACILITY)):
+            return UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY;
+        case (uint32_t(ABILITY_ID::BUILD_SHIELDBATTERY)):
+            return UNIT_TYPEID::PROTOSS_SHIELDBATTERY;
+        case (uint32_t(ABILITY_ID::BUILD_STARGATE)):
+            return UNIT_TYPEID::PROTOSS_STARGATE;
+        case (uint32_t(ABILITY_ID::BUILD_TEMPLARARCHIVE)):
+            return UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE;
+        case (uint32_t(ABILITY_ID::BUILD_TWILIGHTCOUNCIL)):
+            return UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL;
+        default:
+            return 0;
+    }
+    return 0;
+}
+
+static Cost buildAbilityToCost(AbilityID build_ability, Agent *agent) {
+    if (build_ability == ABILITY_ID::MOVE_MOVE)
+        return {0, 0, 0};
+    sc2::UnitTypeData unit_stats =
+        agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(buildAbilityToUnit(build_ability)));
+    return {unit_stats.mineral_cost, unit_stats.vespene_cost, 0};
+}
+
+}  // namespace Aux
+
 //BUILDINGS
 constexpr int COST_NEXUS[2] = {400, 0};
 constexpr int COST_ASSIMILATOR[2] = {75, 0};
