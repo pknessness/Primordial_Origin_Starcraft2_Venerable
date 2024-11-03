@@ -46,33 +46,33 @@ public:
     //std::vector<double> numberDisplay;
 
     const Unit* FindNearestMineralPatch(const Point2D& start) {
-        Units units = Observation()->GetUnits(Unit::Alliance::Neutral);
+        Units units = Observation()->GetUnits(Unit::Alliance::Neutral, Probe::isMineral);
+        Units neutrals = Observation()->GetUnits(Unit::Alliance::Self, Probe::isAssimilator);
+        units.insert(units.end(), neutrals.begin(), neutrals.end());
+
         float distance = std::numeric_limits<float>::max();
         const Unit* target = nullptr;
         for (const auto& u : units) {
-            if (u->unit_type == UNIT_TYPEID::NEUTRAL_MINERALFIELD ||
-                u->unit_type == UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
-                if (mineralTargetting.find(u->tag) != mineralTargetting.end() && mineralTargetting[u->tag] >= 2) {
-                    continue;
-                } else {
-                    if (mineralTargetting.find(u->tag) == mineralTargetting.end()) {
-                        mineralTargetting[u->tag] = 0;
+            if (mineralTargetting.find(u->tag) != mineralTargetting.end() && mineralTargetting[u->tag] >= 2) {
+                continue;
+            } else {
+                if (mineralTargetting.find(u->tag) == mineralTargetting.end()) {
+                    mineralTargetting[u->tag] = 0;
+                }
+                for (auto it = probes.begin(); it != probes.end(); it++) {
+                    if (it->second.minerals == u->tag) {
+                        mineralTargetting[u->tag] += 1;
                     }
-                    for (auto it = probes.begin(); it != probes.end(); it++) {
-                        if (it->second.minerals == u->tag) {
-                            mineralTargetting[u->tag] += 1;
-                        }
 
-                        if (mineralTargetting[u->tag] >= 2) {
-                            continue;
-                        }
+                    if (mineralTargetting[u->tag] >= 2) {
+                        continue;
                     }
                 }
-                float d = DistanceSquared2D(u->pos, start);
-                if (d < distance) {
-                    distance = d;
-                    target = u;
-                }
+            }
+            float d = DistanceSquared2D(u->pos, start);
+            if (d < distance) {
+                distance = d;
+                target = u;
             }
         }
         // If we never found one return false;
@@ -376,11 +376,39 @@ public:
         }
     }
 
+    void tags() {
+        // Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        // for (const Unit* unit : units) {
+        //     int i = 0;
+        //     UnitOrders all = OrderQueue::getAllOrders()[unit->tag];
+        //     std::string cs = "";
+        //     for (auto it = all.begin(); it != all.end(); ++it) {
+        //         cs.append(strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it->ability_id),
+        //         it->target_unit_tag,
+        //                             it->target_pos.x, it->target_pos.y, it->progress));
+        //         // printf("%s", cs.c_str());
+        //         Debug()->DebugTextOut(cs, unit->pos, Color(200, 190, 115), 8);
+        //     }
+        // }
+        sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        for (auto u : units) {
+            Debug()->DebugTextOut(strprintf("%s %xu", UnitTypeToName(u->unit_type), u->tag), u->pos,
+                                  Color(200, 190, 115), 8);
+        }
+        sc2::Units neutrals = observer->GetUnits(sc2::Unit::Alliance::Neutral);
+        for (auto u : neutrals) {
+            Debug()->DebugTextOut(strprintf("%s %xu\n %d", UnitTypeToName(u->unit_type), u->tag, mineralTargetting[u->tag]),
+                                  u->pos, Color(200, 190, 115), 8);
+        }
+    }
+
     void mineralLines() {
-        /*for (auto it = probes.begin(); it != probes.end(); it++) {
-            Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos, observer->GetUnit(it->first)->pos,
-                                  Color(200, 190, 115));
-        }*/
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            //printf("Probe %xu Mineral %xu\n", it->first, it->second.minerals);
+            if (observer->GetUnit(it->second.minerals) != nullptr)
+                Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos, observer->GetUnit(it->first)->pos,
+                                      Color(200, 190, 115));
+        }
     }
 
     /*void orderQueue() {
@@ -393,6 +421,7 @@ public:
         grid();
         orders();
         mineralLines();
+        //tags();
         Debug()->SendDebug();
         MacroQueue::execute(this);
     }

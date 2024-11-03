@@ -12,6 +12,18 @@ public:
     std::list<UnitOrder> buildings;
     char state = 'm';
 
+    static bool isMineral(const Unit &unit) {
+        UnitTypeID type = unit.unit_type;
+        return (type == UNIT_TYPEID::NEUTRAL_MINERALFIELD || type == UNIT_TYPEID::NEUTRAL_LABMINERALFIELD ||
+                type == UNIT_TYPEID::NEUTRAL_MINERALFIELD750 || type == UNIT_TYPEID::NEUTRAL_LABMINERALFIELD750 ||
+                type == UNIT_TYPEID::NEUTRAL_MINERALFIELD450);
+    }
+
+    static bool isAssimilator(const Unit &unit) {
+        UnitTypeID type = unit.unit_type;
+        return (type == UNIT_TYPEID::PROTOSS_ASSIMILATOR);
+    }
+
     bool init(Tag minerals_) {
         minerals = minerals_;
         return true;
