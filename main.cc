@@ -82,6 +82,24 @@ public:
         return target;
     }
 
+    const Unit* FindNearestVespene(const Point2D& start) {
+        Units units = Observation()->GetUnits(Unit::Alliance::Neutral, Probe::isVespene);
+        float distance = std::numeric_limits<float>::max();
+        const Unit* target = nullptr;
+        for (const auto& u : units) {
+            float d = DistanceSquared2D(u->pos, start);
+            if (d < distance) {
+                distance = d;
+                target = u;
+            }
+        }
+        // If we never found one return false;
+        if (distance == std::numeric_limits<float>::max()) {
+            return target;
+        }
+        return target;
+    }
+
     template <typename... Args>
     std::string strprintf(const std::string& format, Args... args) {
         int size_s = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;  // Extra space for '\0'
@@ -92,6 +110,18 @@ public:
         std::unique_ptr<char[]> buf(new char[size]);
         std::snprintf(buf.get(), size, format.c_str(), args...);
         return std::string(buf.get(), buf.get() + size - 1);  // We don't want the '\0' inside
+    }
+
+    Point3D P3D(const Point2D& p) {
+        return Point3D(p.x, p.y, observer->TerrainHeight(p));
+    }
+
+    Point2D P2D(const Point2DI& p) {
+        return Point2D(p.x, p.y);
+    }
+
+    Point2D P2D(const Point3D& p) {
+        return Point2D(p.x, p.y);
     }
 
     virtual void OnGameStart() final {
@@ -115,30 +145,29 @@ public:
             }
         }
 
+        #define stageing 5;
+
         // Temporary, we can replace this with observation->GetStartLocation() once implemented
         startLocation = observer->GetStartLocation();
         if (startLocation.x > game_info.width / 2) {
-            staging_location.x = startLocation.x - 3;
+            staging_location.x = startLocation.x + stageing;
         } else {
-            staging_location.x = startLocation.x + 3;
+            staging_location.x = startLocation.x - stageing;
         }
 
         if (startLocation.y > game_info.height / 2) {
-            staging_location.y = startLocation.y - 3;
+            staging_location.y = startLocation.y + stageing;
         } else {
-            staging_location.y = startLocation.y + 3;
+            staging_location.y = startLocation.y - stageing;
         }
 
         //staging_location = Point2DI(startLocation.x + ;
         expansions = sc2::search::CalculateExpansionLocations(observer, Query());
         for (auto point : expansions) {
-            //printf("[%d,%d]->[%d,%d], ", staging_location.x, staging_location.y, ((Point2DI)point).x,
-            //       ((Point2DI)point).y);
-            auto path = generator.findPath(staging_location, (Point2DI)point);
-            //for (auto& coordinate : path) {
-                //std::cout << coordinate.x << " " << coordinate.y << "\n";
-            //}
-            expansionOrder.push_back(path.size());
+            //auto path = generator.findPath(staging_location, (Point2DI)point);
+            //expansionOrder.push_back(path.size());
+
+            expansionOrder.push_back(Distance2D(P2D(staging_location), point));
         }
 
         std::vector<double> rankedExpansionOrder;
@@ -159,6 +188,7 @@ public:
                 if (rankedExpansionOrder[i] > expansionOrder[j]) {
                     rankedExpansions.insert(rankedExpansions.begin() + i, expansions[j]);
                     rankedExpansionOrder.insert(rankedExpansionOrder.begin() + i, expansionOrder[j]);
+                    imRef(display, int(expansions[j].x), int(expansions[j].y)) = strprintf("%.1f", expansionOrder[j]);
                     inserted = true;
                     break;
                 }
@@ -167,12 +197,13 @@ public:
             if (!inserted) {
                 rankedExpansions.push_back(expansions[j]);
                 rankedExpansionOrder.push_back(expansionOrder[j]);
+                imRef(display, int(expansions[j].x), int(expansions[j].y)) = strprintf("%.1f", expansionOrder[j]);
             }
         }
-        for (int i = 0; i < rankedExpansions.size() - 1; i++) {
+        /*for (int i = 0; i < rankedExpansions.size() - 1; i++) {
             printf("{%d,%d, %f} ", ((Point2DI)rankedExpansions[i]).x, ((Point2DI)rankedExpansions[i]).y,
                    rankedExpansionOrder[i]);
-        }
+        }*/
 
         //pylons.push_back()
         PathingGrid pathinggrid(game_info);
@@ -226,7 +257,7 @@ public:
                 break;
             }
             //printf("[%d,%d; %d]", coordinate.x, coordinate.y, diam);
-            imRef(display, coordinate.x, coordinate.y) = strprintf("%d", diam);
+            //imRef(display, coordinate.x, coordinate.y) = strprintf("%d", diam);
         }
         Point2D center(end1.x / 2.0 + end2.x / 2.0, end1.y / 2.0 + end2.y / 2.0);
         double half_leg = sqrt((end1.x - end2.x) * (end1.x - end2.x) + (end1.y - end2.y) * (end1.y - end2.y)) / 2;
@@ -248,16 +279,44 @@ public:
             Actions()->UnitCommand(u, ABILITY_ID::STOP, false);
         }
 
-        for (auto it = probes.begin(); it != probes.end(); it++) {
+        /*for (auto it = probes.begin(); it != probes.end(); it++) {
             const Unit* mineral_target = FindNearestMineralPatch(observer->GetUnit(it->first)->pos);
             if (!mineral_target) {
                 break;
             }
             it->second.init(mineral_target->tag);
-        }
+        }*/
 
         //MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x, pylons[0].y)}, this);
         //TODO: actionList.emplace_back(UNIT_TYPEID::PROTOSS_PROBE, ABILITY_ID::BUILD_PYLON, Point2D(pylons[0].x, pylons[0].y));
+    }
+
+    virtual void OnUnitCreated(const Unit* unit) {
+        if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
+            probes[unit->tag] = Probe();
+            const Unit* mineral_target = FindNearestMineralPatch(unit->pos);
+            if (!mineral_target) {
+                return;
+            }
+            probes[unit->tag].init(mineral_target->tag);
+            Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER, mineral_target->tag);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_NEXUS) {
+            Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, P2D(unit->pos));
+        }
+
+    }
+
+    void buildingUnits() {
+        sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        for (auto u : units) {
+            if (u->build_progress != 1.0) {
+                UnitTypeData prereqData = observer->GetUnitTypeData().at(static_cast<uint32_t>(u->unit_type));
+                Debug()->DebugTextOut(
+                    strprintf("%.1fs remaining out of %.1fs", prereqData.build_time / fps * (1.0 - u->build_progress),
+                              prereqData.build_time / fps),
+                    u->pos, Color(200, 190, 115), 8);
+            }
+        }
     }
 
     void grid() {
@@ -314,17 +373,17 @@ public:
                     c.r = 115;
                     c.g = 125;
                     c.b = 220;
-                } else if (0 && placementgrid.IsPlacable(point)) {
-                    c.r = 15;
-                    c.g = 220;
-                    c.b = 25;
+                } else if (0 && placementgrid.IsPlacable(point) && pathinggrid.IsPathable(point)) {
+                    c.r = 40;
+                    c.g = 40;
+                    c.b = 40;
                 } else if (0 && pathinggrid.IsPathable(point)) {
                     c.r = 220;
                     c.g = 65;
                     c.b = 25;
                 }
                 #define BOX_BORDER 0.02
-                if (!(c.r == 255 && c.g == 255 && c.b == 255)){
+                if (!(c.r == 255 && c.g == 255 && c.b == 255) || imRef(display, w, h) != "") {
                     float height = heightmap.TerrainHeight(point);
                     Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
                                          Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
@@ -359,18 +418,21 @@ public:
             auto all = it->second.buildings;
             
             std::string cs = "";
-            if (observer->GetUnit(it->first)->orders.size() > 0) {
-                UnitOrder o = observer->GetUnit(it->first)->orders[0];
-                cs.append(strprintf("CUR: %s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(o.ability_id), o.target_unit_tag,
-                                    o.target_pos.x, o.target_pos.y, o.progress));
+            const Unit* probe = observer->GetUnit(it->first);
+            if (probe == nullptr)
+                continue;
+            if (probe->orders.size() > 0) {
+                UnitOrder o = probe->orders[0];
+                cs.append(strprintf("CUR: %s %lx [%.1f,%.1f]\n", AbilityTypeToName(o.ability_id), o.target_unit_tag,
+                                    o.target_pos.x, o.target_pos.y));
             }
             
             for (auto it2 = all.begin(); it2 != all.end(); ++it2) {
-                cs.append(strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it2->ability_id),
+                cs.append(strprintf("%s %lx [%.1f,%.1f]\n", AbilityTypeToName(it2->ability_id),
                 it2->target_unit_tag,
-                                    it2->target_pos.x, it2->target_pos.y, it2->progress));
+                                    it2->target_pos.x, it2->target_pos.y));
                 // printf("%s", cs.c_str());
-                Debug()->DebugTextOut(cs, observer->GetUnit(it->first)->pos, Color(200, 190, 115), 8);
+                Debug()->DebugTextOut(cs, probe->pos, Color(200, 190, 115), 8);
             }
         }
     }
@@ -391,12 +453,12 @@ public:
         // }
         sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
         for (auto u : units) {
-            Debug()->DebugTextOut(strprintf("%s %xu", UnitTypeToName(u->unit_type), u->tag), u->pos,
+            Debug()->DebugTextOut(strprintf("%s %lx", UnitTypeToName(u->unit_type), u->tag), u->pos,
                                   Color(200, 190, 115), 8);
         }
         sc2::Units neutrals = observer->GetUnits(sc2::Unit::Alliance::Neutral);
         for (auto u : neutrals) {
-            Debug()->DebugTextOut(strprintf("%s %xu\n %d", UnitTypeToName(u->unit_type), u->tag, mineralTargetting[u->tag]),
+            Debug()->DebugTextOut(strprintf("%s %lx\n %d", UnitTypeToName(u->unit_type), u->tag, mineralTargetting[u->tag]),
                                   u->pos, Color(200, 190, 115), 8);
         }
     }
@@ -404,8 +466,9 @@ public:
     void mineralLines() {
         for (auto it = probes.begin(); it != probes.end(); it++) {
             //printf("Probe %xu Mineral %xu\n", it->first, it->second.minerals);
-            if (observer->GetUnit(it->second.minerals) != nullptr)
-                Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos, observer->GetUnit(it->first)->pos,
+            if (observer->GetUnit(it->second.minerals) != nullptr && observer->GetUnit(it->first) != nullptr)
+                Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos + Point3D(0,0,1),
+                                      observer->GetUnit(it->first)->pos + Point3D(0, 0, 1),
                                       Color(200, 190, 115));
         }
     }
@@ -414,6 +477,34 @@ public:
         OrderQueue::allOrders
     }*/
 
+    void actionQueue() {
+        /*for (auto it = MacroQueue::actions.begin(); it != MacroQueue::actions.end(); ++it) {
+            std::cout << it->name;
+        }*/
+
+        std::string cs = "";
+        int i = 0;
+        for (auto it = MacroQueue::actions.begin(); it != MacroQueue::actions.end(); ++it) {
+            cs.append(
+                strprintf("%s %lx [%.1f, %.1f]\n", AbilityTypeToName(it->ability_id), it->target_unit_tag, it->target_pos.x, it->target_pos.y));
+
+            Point3D building(it->target_pos.x, it->target_pos.y, observer->TerrainHeight(it->target_pos) + 1);
+
+            Debug()->DebugTextOut(strprintf("%s %lx [%.1f, %.1f]", AbilityTypeToName(it->ability_id),
+                it->target_unit_tag, it->target_pos.x, it->target_pos.y),
+                building,
+                Color(100, 190, 215), 8);
+            Debug()->DebugSphereOut(building, 2);
+            Debug()->DebugTextOut(strprintf("%s %lx [%.1f, %.1f]", AbilityTypeToName(it->ability_id),
+                                            it->target_unit_tag, it->target_pos.x, it->target_pos.y),
+                                  Point2D(0.01, 0.01 + (i * 0.02)), Color(100, 190, 215), 8);
+            // printf("%s", cs.c_str());
+            i++;
+        }
+        //printf("DISPLAY: %s\n", cs.c_str());
+        //Debug()->DebugTextOut(cs);
+    }
+
     virtual void OnStep() final {
         const UnitTypes unit_data = observer->GetUnitTypeData();
         UnitTypeData probe_data = unit_data.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
@@ -421,12 +512,51 @@ public:
         orders();
         mineralLines();
         //tags();
+        buildingUnits();
+        actionQueue();
         Debug()->SendDebug();
+
+        /*for (auto it = probes.begin(); it != probes.end(); it++) {
+            if (it->second.minerals == 0) {
+                const Unit* mineral_target = FindNearestMineralPatch(observer->GetUnit(it->first)->pos);
+                if (!mineral_target) {
+                    break;
+                }
+                it->second.init(mineral_target->tag);
+            }
+        }*/
+
         MacroQueue::execute(this);
         //Debug()->DebugTextOut(strprintf("%d", observer->GetGameLoop()));
+
+        const Unit* vesp = FindNearestVespene(startLocation);
+        Point2D gateway;
+        Point2D cyber;
+        if (pylons[0].x > game_info.width / 2) {
+            gateway.x = pylons[0].x;
+            cyber.x = pylons[0].x - 2;
+        } else {
+            gateway.x = pylons[0].x;
+            cyber.x = pylons[0].x + 2;
+        }
+
+        if (pylons[0].y > game_info.height / 2) {
+            gateway.y = pylons[0].y - 2;
+            cyber.y = pylons[0].y;
+        } else {
+            gateway.y = pylons[0].y + 2;
+            cyber.y = pylons[0].y;
+        }
+
         switch (observer->GetGameLoop()) {
-            case (60):
+            case (20):
                 MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x, pylons[0].y)}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, Point2D(pylons[0].x, pylons[0].y + 3)}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y)}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, Point2D(pylons[0].x, pylons[0].y - 3)},this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
+                MacroQueue::addUpgrade(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE, this);
+                MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
                 break;
             default:
                 break;
@@ -481,7 +611,10 @@ int main(int argc, char* argv[]) {
     //coordinator.StartGame("5_13/Oceanborn513AIE.SC2Map");
     std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map", "5_13/Equilibrium513AIE.SC2Map", "5_13/GoldenAura513AIE.SC2Map",
                            "5_13/Gresvan513AIE.SC2Map", "5_13/HardLead513AIE.SC2Map", "5_13/SiteDelta513AIE.SC2Map"};
-    coordinator.StartGame(maps[std::rand() % 6]);
+    int r = (std::rand() % 6000)/1000;
+    printf("rand %d\n", r);
+
+    coordinator.StartGame(maps[r]);
     while (coordinator.Update()) {
     }
 
@@ -490,6 +623,7 @@ int main(int argc, char* argv[]) {
 
 //add generator to global variables
 //if near supply cap, save for pylon
+//add place-able check to actionQueue
 //build list
 //army list
 //per-unit micro

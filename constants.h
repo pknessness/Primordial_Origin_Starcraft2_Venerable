@@ -50,6 +50,78 @@ static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {
     return 0;
 }
 
+static UpgradeID researchAbilityToUpgrade(AbilityID build_ability) {
+    switch (uint32_t(build_ability)) {
+        case (uint32_t(ABILITY_ID::RESEARCH_ADEPTRESONATINGGLAIVES)):
+            return UPGRADE_ID::ADEPTKILLBOUNCE;
+        case(uint32_t(ABILITY_ID::RESEARCH_BLINK)):
+            return UPGRADE_ID::BLINKTECH;
+        case(uint32_t(ABILITY_ID::RESEARCH_CHARGE)):
+            return UPGRADE_ID::CHARGE;
+        case(uint32_t(ABILITY_ID::RESEARCH_EXTENDEDTHERMALLANCE)):
+            return UPGRADE_ID::EXTENDEDTHERMALLANCE;
+        case(uint32_t(ABILITY_ID::RESEARCH_GRAVITICBOOSTER)):
+            return UPGRADE_ID::OBSERVERGRAVITICBOOSTER;
+        case(uint32_t(ABILITY_ID::RESEARCH_GRAVITICDRIVE)):
+            return UPGRADE_ID::GRAVITICDRIVE;
+        case (uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRARMOR)):
+            return UPGRADE_ID::INVALID;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRARMORLEVEL1)):
+            return UPGRADE_ID::PROTOSSAIRARMORSLEVEL1;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRARMORLEVEL2)):
+            return UPGRADE_ID::PROTOSSAIRARMORSLEVEL2;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRARMORLEVEL3)):
+            return UPGRADE_ID::PROTOSSAIRARMORSLEVEL3;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRWEAPONS)):
+            return UPGRADE_ID::INVALID;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRWEAPONSLEVEL1)):
+            return UPGRADE_ID::PROTOSSAIRWEAPONSLEVEL1;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRWEAPONSLEVEL2)):
+            return UPGRADE_ID::PROTOSSAIRWEAPONSLEVEL2;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSAIRWEAPONSLEVEL3)):
+            return UPGRADE_ID::PROTOSSAIRWEAPONSLEVEL3;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDARMOR)):
+            return UPGRADE_ID::INVALID;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDARMORLEVEL1)):
+            return UPGRADE_ID::PROTOSSGROUNDARMORSLEVEL1;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDARMORLEVEL2)):
+            return UPGRADE_ID::PROTOSSGROUNDARMORSLEVEL2;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDARMORLEVEL3)):
+            return UPGRADE_ID::PROTOSSGROUNDARMORSLEVEL3;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDWEAPONS)):
+            return UPGRADE_ID::INVALID;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDWEAPONSLEVEL1)):
+            return UPGRADE_ID::PROTOSSGROUNDWEAPONSLEVEL1;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDWEAPONSLEVEL2)):
+            return UPGRADE_ID::PROTOSSGROUNDWEAPONSLEVEL2;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSGROUNDWEAPONSLEVEL3)):
+            return UPGRADE_ID::PROTOSSGROUNDWEAPONSLEVEL3;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSSHIELDS)):
+            return UPGRADE_ID::INVALID;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSSHIELDSLEVEL1)):
+            return UPGRADE_ID::PROTOSSSHIELDSLEVEL1;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSSHIELDSLEVEL2)):
+            return UPGRADE_ID::PROTOSSSHIELDSLEVEL2;
+        case(uint32_t(ABILITY_ID::RESEARCH_PROTOSSSHIELDSLEVEL3)):
+            return UPGRADE_ID::PROTOSSSHIELDSLEVEL3;
+        case(uint32_t(ABILITY_ID::RESEARCH_PSIONICAMPLIFIERS)):
+            return UPGRADE_ID::PSIONICAMPLIFIERS;
+        case(uint32_t(ABILITY_ID::RESEARCH_PSISTORM)):
+            return UPGRADE_ID::PSISTORMTECH;
+        case(uint32_t(ABILITY_ID::RESEARCH_SHADOWSTRIKE)):
+            return UPGRADE_ID::DARKTEMPLARBLINKUPGRADE;
+        case(uint32_t(ABILITY_ID::RESEARCH_TEMPESTRANGEUPGRADE)):
+            return UPGRADE_ID::TEMPESTRANGEUPGRADE;
+        case(uint32_t(ABILITY_ID::RESEARCH_TEMPESTRESEARCHGROUNDATTACKUPGRADE)):
+            return UPGRADE_ID::TEMPESTGROUNDATTACKUPGRADE;  
+        case(uint32_t(ABILITY_ID::RESEARCH_VOIDRAYSPEEDUPGRADE)):
+            return UPGRADE_ID::VOIDRAYSPEEDUPGRADE;
+        case(uint32_t(ABILITY_ID::RESEARCH_WARPGATE)):
+            return UPGRADE_ID::WARPGATERESEARCH;
+    }
+    return 0;
+}
+
 static Cost buildAbilityToCost(AbilityID build_ability, Agent *agent) {
     if (build_ability == ABILITY_ID::MOVE_MOVE)
         return {0, 0, 0};
@@ -58,7 +130,16 @@ static Cost buildAbilityToCost(AbilityID build_ability, Agent *agent) {
     return {unit_stats.mineral_cost, unit_stats.vespene_cost, 0};
 }
 
+static Cost UpgradeToCost(AbilityID research_ability, Agent *agent) {
+    UpgradeData upgrade_stats =
+        agent->Observation()->GetUpgradeData().at(static_cast<uint32_t>(researchAbilityToUpgrade(research_ability)));
+    return {upgrade_stats.mineral_cost, upgrade_stats.vespene_cost, 0};
+}
+
 }  // namespace Aux
+
+constexpr float timeSpeed = 1.4;
+constexpr float fps = 16 * timeSpeed;
 
 //BUILDINGS
 constexpr int COST_NEXUS[2] = {400, 0};

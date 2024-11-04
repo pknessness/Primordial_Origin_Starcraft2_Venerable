@@ -20,6 +20,14 @@ public:
                 type == UNIT_TYPEID::NEUTRAL_MINERALFIELD450);
     }
 
+    static bool isVespene(const Unit &unit) {
+        UnitTypeID type = unit.unit_type;
+        return (type == UNIT_TYPEID::NEUTRAL_VESPENEGEYSER || type == UNIT_TYPEID::NEUTRAL_PROTOSSVESPENEGEYSER ||
+                type == UNIT_TYPEID::NEUTRAL_PURIFIERVESPENEGEYSER || type == UNIT_TYPEID::NEUTRAL_RICHVESPENEGEYSER ||
+                type == UNIT_TYPEID::NEUTRAL_SHAKURASVESPENEGEYSER || type == UNIT_TYPEID::NEUTRAL_SPACEPLATFORMGEYSER);
+        //return (type == UNIT_TYPEID::NEUTRAL_VESPENEGEYSER);
+    }
+
     static bool isAssimilator(const Unit &unit) {
         UnitTypeID type = unit.unit_type;
         return (type == UNIT_TYPEID::PROTOSS_ASSIMILATOR);
@@ -30,9 +38,9 @@ public:
         return true;
     }
 
-    bool addBuilding(AbilityID building, Point2D point) {
-        buildings.push_back({ABILITY_ID::GENERAL_MOVE, NullTag, point});
-        buildings.push_back({building, NullTag, point});
+    bool addBuilding(AbilityID building, Point2D point, Tag geyser = NullTag) {
+        buildings.push_back({ABILITY_ID::MOVE_MOVE, NullTag, point});
+        buildings.push_back({building, geyser, point});
         return true;
     }
 
@@ -42,10 +50,23 @@ public:
                 buildings.front().ability_id, agent);
             //printf("BuildAction: %d/%d %d/%d\n", agent->Observation()->GetMinerals(), c.minerals,
             //       agent->Observation()->GetVespene(), c.vespene);
-            if (agent->Observation()->GetMinerals() < c.minerals ||
-                agent->Observation()->GetVespene() < c.vespene) {
+            if (agent->Observation()->GetMinerals() < c.minerals || agent->Observation()->GetVespene() < c.vespene) {
                 agent->Actions()->UnitCommand(unit, ABILITY_ID::STOP, false);
                 return false;
+            } 
+            if (buildings.front().ability_id != ABILITY_ID::MOVE_MOVE && !agent->Query()->Placement(
+                       buildings.front().ability_id, buildings.front().target_pos)) {
+                if (agent->Query()->Placement(buildings.front().ability_id, buildings.front().target_pos + Point2D(0, 1))) {
+                    buildings.front().target_pos = buildings.front().target_pos + Point2D(0, 1);
+                } else if (agent->Query()->Placement(buildings.front().ability_id,buildings.front().target_pos + Point2D(0, -1))) {
+                    buildings.front().target_pos = buildings.front().target_pos + Point2D(0, -1);
+                } else if (agent->Query()->Placement(buildings.front().ability_id,buildings.front().target_pos + Point2D(1, 0))) {
+                    buildings.front().target_pos = buildings.front().target_pos + Point2D(1, 0);
+                } else if (agent->Query()->Placement(buildings.front().ability_id,buildings.front().target_pos + Point2D(-1, 0))) {
+                    buildings.front().target_pos = buildings.front().target_pos + Point2D(-1, 0);
+                } else {
+                    return false;
+                }
             }
             if (buildings.front().target_unit_tag == NullTag) {
                 agent->Actions()->UnitCommand(unit, buildings.front().ability_id, buildings.front().target_pos, false);

@@ -31,6 +31,13 @@ namespace MacroQueue {
         return true;
 	}
 
+    static bool addUpgrade(UnitTypeID unit_type, ABILITY_ID upgrade, Agent *agent) {
+        unitTypes.push_back(unit_type);
+        actions.push_back({upgrade});
+        costs.push_back(Aux::UpgradeToCost(upgrade, agent));
+        return true;
+    }
+
     static bool addBuilding(UnitOrder order, Agent *agent) {
         unitTypes.push_back(UNIT_TYPEID::PROTOSS_PROBE);
         actions.push_back(order);
@@ -49,9 +56,19 @@ namespace MacroQueue {
         UnitOrder action = actions.front();
         UnitTypeID unitType = unitTypes.front();
 
+        UnitTypeData unitToBuild = agent->Observation()->GetUnitTypeData().at(
+            static_cast<uint32_t>(Aux::buildAbilityToUnit(action.ability_id)));
+
+        UnitTypeID prereq = unitToBuild.tech_requirement;
+        if (Aux::buildAbilityToUnit(action.ability_id) == UNIT_TYPEID::PROTOSS_GATEWAY) {
+            prereq = UNIT_TYPEID::PROTOSS_PYLON;
+        }
+
         int numMineralMiners = -1;
         int numVespeneMiners = 0;
         for (auto it = probes.begin(); it != probes.end(); it++) {
+            if (agent->Observation()->GetUnit(it->second.minerals) == nullptr)
+                continue;
             if (Probe::isMineral(*agent->Observation()->GetUnit(it->second.minerals))) {
                 numMineralMiners ++;
             }else if (Probe::isAssimilator(*agent->Observation()->GetUnit(it->second.minerals))) {
@@ -59,50 +76,74 @@ namespace MacroQueue {
             }
         }
 
+        bool prerequisite = (prereq == UNIT_TYPEID::INVALID);
+
         sc2::Units units = agent->Observation()->GetUnits(sc2::Unit::Alliance::Self);
         const sc2::Unit *un;
+        bool foundUnit = false;
         if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
             double dist = -1;
             for (auto u : units) {
-                if (u->unit_type == unitType && Probe::isMineral(*agent->Observation()->GetUnit(probes[u->tag].minerals))) {
+                const Unit *mineral = agent->Observation()->GetUnit(probes[u->tag].minerals);
+                if (u->unit_type == unitType && mineral != nullptr && Probe::isMineral(*mineral)) {
                     double d = agent->Query()->PathingDistance(u, action.target_pos);
                     if (dist == -1 || dist > d) {
                         // possibleUnits.push_back(u);
                         un = u;
                         dist = d;
+                        foundUnit = true;
                     }
                 }
             }
         } else {
             for (auto u : units) {
+                //printf("-%lx, %s?%s-\n", u->tag, UnitTypeToName(u->unit_type), UnitTypeToName(unitType));
                 if (u->unit_type == unitType) {
                     un = u;
+                    foundUnit = true;
                 }
             }
         }
-        if (un == nullptr)
+        if (!foundUnit)
             return false;
 
         if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
-            double dist = agent->Query()->PathingDistance(un, action.target_pos);
-            sc2::UnitTypeData unit_stats =
-                agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
-            theoreticalMinerals += (dist / unit_stats.movement_speed) * MINERALS_PER_PROBE_PER_SEC * numMineralMiners;
-            theoreticalVespene += (dist / unit_stats.movement_speed) * VESPENE_PER_PROBE_PER_SEC * numVespeneMiners;
-        }
-        printf("%d/%d %d/%d\n", theoreticalMinerals, cost.minerals, theoreticalVespene, cost.vespene);
+            UnitTypeData prereqData = agent->Observation()->GetUnitTypeData().at(
+                static_cast<uint32_t>(prereq));
 
-        if (cost.minerals <= theoreticalMinerals && cost.vespene <= theoreticalVespene) {
+            UnitTypeData unit_stats =
+                agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PROBE));
+            
+            double dt = agent->Query()->PathingDistance(un, action.target_pos) / (unit_stats.movement_speed * timeSpeed);
+
+            theoreticalMinerals += dt * MINERALS_PER_PROBE_PER_SEC * numMineralMiners;
+            theoreticalVespene += dt * VESPENE_PER_PROBE_PER_SEC * numVespeneMiners;
+
+            for (auto u : units) {
+                if (u->unit_type == prereq && ((1.0 - u->build_progress) * prereqData.build_time/fps) < dt) {
+                    prerequisite = true;
+                }
+            }
+        }
+
+        
+
+        printf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
+               cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite);
+
+        if (cost.minerals <= theoreticalMinerals && cost.vespene <= theoreticalVespene && prerequisite) {
             if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
                 agent->Actions()->UnitCommand(un, ABILITY_ID::STOP, false);
-                probes[un->tag].addBuilding(action.ability_id,action.target_pos);
+                probes[un->tag].addBuilding(action.ability_id,action.target_pos, action.target_unit_tag);
             } else {
-                if (action.target_unit_tag != NullTag) {
+                if (action.target_unit_tag == NullTag) {
                     agent->Actions()->UnitCommand(un, action.ability_id, action.target_pos,
                                                   false);
-                } else {
+                } else if(action.target_pos.x != 0 || action.target_pos.y != 0){
                     const Unit *target = agent->Observation()->GetUnit(action.target_unit_tag);
                     agent->Actions()->UnitCommand(un, action.ability_id, target, false);
+                } else {
+                    agent->Actions()->UnitCommand(un, action.ability_id, false);
                 }
             }
 
