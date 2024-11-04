@@ -100,18 +100,6 @@ public:
         return target;
     }
 
-    template <typename... Args>
-    std::string strprintf(const std::string& format, Args... args) {
-        int size_s = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;  // Extra space for '\0'
-        if (size_s <= 0) {
-            throw std::runtime_error("Error during formatting.");
-        }
-        auto size = static_cast<size_t>(size_s);
-        std::unique_ptr<char[]> buf(new char[size]);
-        std::snprintf(buf.get(), size, format.c_str(), args...);
-        return std::string(buf.get(), buf.get() + size - 1);  // We don't want the '\0' inside
-    }
-
     Point3D P3D(const Point2D& p) {
         return Point3D(p.x, p.y, observer->TerrainHeight(p));
     }
@@ -145,7 +133,7 @@ public:
             }
         }
 
-        #define stageing 5;
+        #define stageing 3;
 
         // Temporary, we can replace this with observation->GetStartLocation() once implemented
         startLocation = observer->GetStartLocation();
@@ -611,7 +599,7 @@ int main(int argc, char* argv[]) {
     //coordinator.StartGame("5_13/Oceanborn513AIE.SC2Map");
     std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map", "5_13/Equilibrium513AIE.SC2Map", "5_13/GoldenAura513AIE.SC2Map",
                            "5_13/Gresvan513AIE.SC2Map", "5_13/HardLead513AIE.SC2Map", "5_13/SiteDelta513AIE.SC2Map"};
-    int r = (std::rand() % 6000)/1000;
+    int r = 5;//(std::rand() % 12000)/2000;
     printf("rand %d\n", r);
 
     coordinator.StartGame(maps[r]);

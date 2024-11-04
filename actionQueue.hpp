@@ -62,6 +62,13 @@ namespace MacroQueue {
         UnitTypeID prereq = unitToBuild.tech_requirement;
         if (Aux::buildAbilityToUnit(action.ability_id) == UNIT_TYPEID::PROTOSS_GATEWAY) {
             prereq = UNIT_TYPEID::PROTOSS_PYLON;
+        }else if (action.ability_id == ABILITY_ID::RESEARCH_WARPGATE ||
+            action.ability_id == ABILITY_ID::RESEARCH_PROTOSSAIRARMORLEVEL1 ||
+            action.ability_id == ABILITY_ID::RESEARCH_PROTOSSAIRWEAPONSLEVEL1) {
+            prereq = UNIT_TYPEID::PROTOSS_CYBERNETICSCORE;
+        } else if (action.ability_id == ABILITY_ID::RESEARCH_PROTOSSGROUNDARMORLEVEL1 ||
+                   action.ability_id == ABILITY_ID::RESEARCH_PROTOSSGROUNDWEAPONSLEVEL1) {
+            prereq = UNIT_TYPEID::PROTOSS_FORGE;
         }
 
         int numMineralMiners = -1;
@@ -124,12 +131,24 @@ namespace MacroQueue {
                     prerequisite = true;
                 }
             }
+        } else {
+            for (auto u : units) {
+                if (u->unit_type == prereq && u->build_progress == 1.0) {
+                    prerequisite = true;
+                }
+            }
         }
 
         
 
-        printf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
-               cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite);
+        //printf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
+        //       cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite);
+
+        agent->Debug()->DebugTextOut(
+            strprintf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id),
+                      action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
+                      cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite),
+                              Point2D(0.01, 0.6), Color(100, 190, 215), 8);
 
         if (cost.minerals <= theoreticalMinerals && cost.vespene <= theoreticalVespene && prerequisite) {
             if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
@@ -143,6 +162,7 @@ namespace MacroQueue {
                     const Unit *target = agent->Observation()->GetUnit(action.target_unit_tag);
                     agent->Actions()->UnitCommand(un, action.ability_id, target, false);
                 } else {
+
                     agent->Actions()->UnitCommand(un, action.ability_id, false);
                 }
             }
