@@ -46,8 +46,8 @@ public:
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
 
-    /*bool addNewPylonSlot() {
-        for (int i = 0; i < pylons.size(); i++) {
+    bool addNewPylonSlot() {
+        for (int i = 1; i < pylons.size(); i++) {
             for (int j = 0; j < 4; j ++) {
                 float angle = 2 * PI * (std::rand() % 8192) / 8192.0;
                 Point2D potential(pylons[i].x + cos(angle) * 6.2,pylons[i].y + sin(angle) * 6.2);
@@ -58,7 +58,29 @@ public:
             }
         }
         return false;
-    }*/
+    }
+
+    bool addNewBuildingSlot() {
+        for (int i = 1; i < pylons.size(); i++) {
+            for (int j = 0; j < 4; j++) {
+                float angle = j * PI / 2;
+                Point2D potential(pylons[i].x + cos(angle) * 3, pylons[i].y + sin(angle) * 3);
+                printf("[%.1f, %.1f]", potential.x, potential.y);
+                if (Query()->Placement(ABILITY_ID::BUILD_GATEWAY, potential)) {
+                    printf("YES");
+                    buildingSpots.push_back(potential);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    Point2D getBuildingSpot() {
+        if (buildingSpots.size() <= buildSpotIndex)
+            addNewBuildingSlot();
+        return buildingSpots[buildSpotIndex++];
+    }
 
     const Unit* FindNearestMineralPatch(const Point2D& start) {
         Units units = Observation()->GetUnits(Unit::Alliance::Neutral, Probe::isMineral);
@@ -144,15 +166,15 @@ public:
         // Temporary, we can replace this with observation->GetStartLocation() once implemented
         startLocation = observer->GetStartLocation();
         if (startLocation.x > game_info.width / 2) {
-            staging_location.x = startLocation.x + stageing;
-        } else {
             staging_location.x = startLocation.x - stageing;
+        } else {
+            staging_location.x = startLocation.x + stageing;
         }
 
         if (startLocation.y > game_info.height / 2) {
-            staging_location.y = startLocation.y + stageing;
-        } else {
             staging_location.y = startLocation.y - stageing;
+        } else {
+            staging_location.y = startLocation.y + stageing;
         }
 
         //staging_location = Point2DI(startLocation.x + ;
@@ -286,6 +308,7 @@ public:
 
         buildingSpots.push_back(gateway);
         buildingSpots.push_back(cyber);
+        addNewBuildingSlot();
 
         /*sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
         const sc2::Unit* un;
@@ -322,6 +345,15 @@ public:
             Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, P2D(unit->pos));
         }
 
+    }
+
+    virtual void OnUnitDestroyed(const Unit* unit) {
+        if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
+            mineralTargetting[probes[unit->tag].minerals] -= 1;
+            probes.erase(unit->tag);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_NEXUS) {
+            Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, P2D(unit->pos));
+        }
     }
 
     void buildingUnits() {
@@ -383,10 +415,14 @@ public:
                     c.r = 215;
                     c.g = 125;
                     c.b = 220;
-                } else if (std::find(pylons.begin(), pylons.end(), point) != pylons.end()) {
+                } else if (std::find(pylons.begin(), pylons.end(), P2D(point)) != pylons.end()) {
                     c.r = 215;
                     c.g = 125;
                     c.b = 220;
+                } else if (std::find(buildingSpots.begin(), buildingSpots.end(), P2D(point)) != buildingSpots.end()) {
+                    c.r = 115;
+                    c.g = 225;
+                    c.b = 20;
                 } else if (std::find(path.begin(), path.end(), point) != path.end()) {
                     c.r = 115;
                     c.g = 125;
@@ -490,7 +526,7 @@ public:
                 Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos + Point3D(0,0,1),
                                       observer->GetUnit(it->first)->pos + Point3D(0, 0, 1),
                                       Color(200, 190, 115));
-            else if (observer->GetUnit(it->second.minerals) == nullptr) {
+            else if (observer->GetUnit(it->second.minerals) == nullptr && observer->GetUnit(it->first) != nullptr) {
                 Debug()->DebugLineOut(observer->GetUnit(it->first)->pos,
                                       observer->GetUnit(it->first)->pos + Point3D(0, 0, 1), Color(200, 190, 115));
             }
@@ -552,20 +588,26 @@ public:
         MacroQueue::execute(this);
         //Debug()->DebugTextOut(strprintf("%d", observer->GetGameLoop()));
 
-        const Unit* vesp = FindNearestVespene(startLocation);
+        
 
         switch (observer->GetGameLoop()) {
-            case (20):
+            case (20): {
+                const Unit* vesp = FindNearestVespene(startLocation);
                 MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, pylons[pylonIndex++]}, this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, buildingSpots[buildSpotIndex++]}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, getBuildingSpot()}, this);
                 MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
                 MacroQueue::addBuilding({ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y + 0.5)},this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, buildingSpots[buildSpotIndex++]}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, getBuildingSpot()}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, pylons[pylonIndex++]}, this);
                 MacroQueue::addUpgrade(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE, this);
                 MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_ROBOTICSFACILITY, NullTag, getBuildingSpot()}, this);
+                MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+                MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
                 break;
-            default:
-                /*if (observer->GetGameLoop() > 3600) {
+            }
+            default: {
+                if (observer->GetGameLoop() > 3600) {
                     if (observer->GetFoodCap() < 200 && observer->GetFoodCap() - 3 < observer->GetFoodUsed() &&
                         MacroQueue::actions.front().ability_id != ABILITY_ID::BUILD_PYLON) {
                         while (pylonIndex >= pylons.size()) {
@@ -573,9 +615,12 @@ public:
                         }
                         MacroQueue::addPylon(pylons[pylonIndex++], this);
                     }
-                }*/
-                
+                }
+                if (buildSpotIndex < buildingSpots.size() - 1) {
+                    addNewBuildingSlot();
+                }
                 break;
+            }
         }
             
     }
@@ -584,7 +629,9 @@ public:
         switch (unit->unit_type.ToType()) {
             case UNIT_TYPEID::PROTOSS_NEXUS: {
                 //Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, Observation()->GetCameraPos(), false);
-                Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_PROBE);
+                if (unit->assigned_harvesters < unit->ideal_harvesters) {
+                    Actions()->UnitCommand(unit, ABILITY_ID::TRAIN_PROBE);
+                }
                 //Debug()->DebugTextOut("TRAIN_PROBE");
                 break;
             }
@@ -601,6 +648,8 @@ public:
             }
         }
     }
+
+
 private:
     bool warpStructure(const Unit* unit, AbilityID build_tag, const Point2D& point) {
         if (unit->unit_type.ToType() != UNIT_TYPEID::PROTOSS_PROBE)
