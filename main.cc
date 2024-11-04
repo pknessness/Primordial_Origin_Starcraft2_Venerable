@@ -36,29 +36,12 @@ public:
 
     AStar::Generator generator;
 
-    std::vector<Point2D> pylons;
-    int pylonIndex = 0;
-    std::vector<Point2D> buildingSpots;
-    int buildSpotIndex = 0;
+    std::vector<Point2DI> pylons;
 
     map<std::string>* display;  
 
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
-
-    /*bool addNewPylonSlot() {
-        for (int i = 0; i < pylons.size(); i++) {
-            for (int j = 0; j < 4; j ++) {
-                float angle = 2 * PI * (std::rand() % 8192) / 8192.0;
-                Point2D potential(pylons[i].x + cos(angle) * 6.2,pylons[i].y + sin(angle) * 6.2);
-                if (Query()->Placement(ABILITY_ID::BUILD_PYLON, potential)) {
-                    pylons.push_back(potential);
-                    return true;
-                }
-            }
-        }
-        return false;
-    }*/
 
     const Unit* FindNearestMineralPatch(const Point2D& start) {
         Units units = Observation()->GetUnits(Unit::Alliance::Neutral, Probe::isMineral);
@@ -264,28 +247,7 @@ public:
             pylons.push_back(ans1);
         }
 
-        pylons.push_back(P2D(staging_location));
-        Point2D gateway;
-        Point2D cyber;
-
-        if (pylons[0].x > game_info.width / 2) {
-            gateway.x = pylons[0].x;
-            cyber.x = pylons[0].x - 2.5;
-        } else {
-            gateway.x = pylons[0].x;
-            cyber.x = pylons[0].x + 2.5;
-        }
-
-        if (pylons[0].y > game_info.height / 2) {
-            gateway.y = pylons[0].y - 2.5;
-            cyber.y = pylons[0].y;
-        } else {
-            gateway.y = pylons[0].y + 2.5;
-            cyber.y = pylons[0].y;
-        }
-
-        buildingSpots.push_back(gateway);
-        buildingSpots.push_back(cyber);
+        pylons.push_back(staging_location);
 
         /*sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
         const sc2::Unit* un;
@@ -553,28 +515,35 @@ public:
         //Debug()->DebugTextOut(strprintf("%d", observer->GetGameLoop()));
 
         const Unit* vesp = FindNearestVespene(startLocation);
+        Point2D gateway;
+        Point2D cyber;
+        if (pylons[0].x > game_info.width / 2) {
+            gateway.x = pylons[0].x + 0.5;
+            cyber.x = pylons[0].x - 2 + 0.5;
+        } else {
+            gateway.x = pylons[0].x + 0.5;
+            cyber.x = pylons[0].x + 2 + 0.5;
+        }
+
+        if (pylons[0].y > game_info.height / 2) {
+            gateway.y = pylons[0].y - 2 + 0.5;
+            cyber.y = pylons[0].y + 0.5;
+        } else {
+            gateway.y = pylons[0].y + 2 + 0.5;
+            cyber.y = pylons[0].y + 0.5;
+        }
 
         switch (observer->GetGameLoop()) {
             case (20):
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, pylons[pylonIndex++]}, this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, buildingSpots[buildSpotIndex++]}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, Point2D(pylons[0].x + 0.5, pylons[0].y + 0.5)},this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, gateway}, this);
                 MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
                 MacroQueue::addBuilding({ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y + 0.5)},this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, buildingSpots[buildSpotIndex++]}, this);
+                MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, cyber},this);
                 MacroQueue::addUpgrade(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE, this);
                 MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
                 break;
             default:
-                /*if (observer->GetGameLoop() > 3600) {
-                    if (observer->GetFoodCap() < 200 && observer->GetFoodCap() - 3 < observer->GetFoodUsed() &&
-                        MacroQueue::actions.front().ability_id != ABILITY_ID::BUILD_PYLON) {
-                        while (pylonIndex >= pylons.size()) {
-                            addNewPylonSlot();
-                        }
-                        MacroQueue::addPylon(pylons[pylonIndex++], this);
-                    }
-                }*/
-                
                 break;
         }
             
@@ -628,8 +597,7 @@ int main(int argc, char* argv[]) {
     std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map", "5_13/Equilibrium513AIE.SC2Map", "5_13/GoldenAura513AIE.SC2Map",
                            "5_13/Gresvan513AIE.SC2Map", "5_13/HardLead513AIE.SC2Map", "5_13/SiteDelta513AIE.SC2Map"};
     int r = 5;//(std::rand() % 12000)/2000;
-    printf("rand %d [%d %d %d %d %d %d]\n", r, std::rand(), std::rand(), std::rand(), std::rand(), std::rand(),
-           std::rand());
+    printf("rand %d\n", r);
 
     coordinator.StartGame(maps[r]);
     while (coordinator.Update()) {
