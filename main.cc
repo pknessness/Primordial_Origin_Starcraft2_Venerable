@@ -41,7 +41,9 @@ public:
     std::vector<Point2D> buildingSpots;
     int buildSpotIndex = 0;
 
-    map<std::string>* display;  
+    map<std::string>* display;
+
+    map<uint8_t>* placements;
 
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
@@ -60,6 +62,39 @@ public:
         return false;
     }
 
+    bool generatePlacement(Point2D p, int size) {
+        int x = p.x - (size / 2);
+        int y = p.y - (size / 2);
+        for (int i = x; i < x + size; i++) {
+            for (int j = y; j < y + size; j++) {
+                imRef(placements, i, j) = 1;
+            }
+        }
+        return true;
+    }
+
+    bool ungeneratePlacement(Point2D p, int size) {
+        int x = p.x - (size / 2);
+        int y = p.y - (size / 2);
+        for (int i = x; i < x + size; i++) {
+            for (int j = y; j < y + size; j++) {
+                imRef(placements, i, j) = 0;
+            }
+        }
+        return true;
+    }
+
+    bool check3x3Placement(Point2D p) {
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                if (!observer->IsPlacable(p + Point2D(i, j))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     bool addNewBuildingSlot() {
         for (int i = 1; i < pylons.size(); i++) {
             for (int j = 0; j < 4; j++) {
@@ -68,8 +103,11 @@ public:
                 printf("[%.1f, %.1f]", potential.x, potential.y);
                 if (Query()->Placement(ABILITY_ID::BUILD_GATEWAY, potential)) {
                     printf("YES");
+                    imRef(display, int(potential.x), int(potential.y)) = strprintf("YES");
                     buildingSpots.push_back(potential);
                     return true;
+                } else {
+                    imRef(display, int(potential.x), int(potential.y)) = strprintf("NO");
                 }
             }
         }
@@ -154,6 +192,7 @@ public:
         generator.setGameInfo(&game_info);
 
         display = new map<std::string>(game_info.width, game_info.height, true);
+        placements = new map<uint8_t>(game_info.width, game_info.height, true);
 
         for (int x = 0; x < game_info.width; x++) {
             for (int y = 0; y < game_info.height; y++) {
