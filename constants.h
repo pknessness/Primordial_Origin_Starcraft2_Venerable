@@ -148,6 +148,51 @@ static Cost UpgradeToCost(AbilityID research_ability, Agent *agent) {
     return {upgrade_stats.mineral_cost, upgrade_stats.vespene_cost, 0};
 }
 
+static int structureDiameter(UnitTypeID type) {
+    switch (uint32_t(type)) {
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PYLON)):
+            return 2;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_GATEWAY)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_NEXUS)):
+            return 5;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ASSIMILATOR)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_WARPGATE)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ASSIMILATORRICH)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FORGE)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOTONCANNON)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSBAY)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_SHIELDBATTERY)):
+            return 2;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_STARGATE)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE)):
+            return 3;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL)):
+            return 3;
+        default:
+            break;
+    }
+
+    /*PROTOSS_ASSIMILATOR = 61,
+    PROTOSS_ASSIMILATORRICH = 1994, PROTOSS_CYBERNETICSCORE = 72,
+    PROTOSS_DARKSHRINE = 69,
+    PROTOSS_FLEETBEACON = 64, PROTOSS_FORGE = 63, PROTOSS_GATEWAY = 62,
+    PROTOSS_NEXUS = 59, PROTOSS_PHOTONCANNON = 66,
+    PROTOSS_PYLON = 60, PROTOSS_ROBOTICSBAY = 70, PROTOSS_ROBOTICSFACILITY = 71,
+    PROTOSS_SHIELDBATTERY = 1910, PROTOSS_STARGATE = 67,
+    PROTOSS_TEMPLARARCHIVE = 68, PROTOSS_TWILIGHTCOUNCIL = 65,
+    PROTOSS_WARPGATE = 133,*/
+}
+
 }  // namespace Aux
 
 constexpr float timeSpeed = 1.4;

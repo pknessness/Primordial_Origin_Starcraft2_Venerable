@@ -48,6 +48,16 @@ public:
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
 
+    static bool isPylon(const Unit& unit) {
+        UnitTypeID type = unit.unit_type;
+        return (type == UNIT_TYPEID::PROTOSS_PYLON);
+    }
+
+    static bool isNexus(const Unit& unit) {
+        UnitTypeID type = unit.unit_type;
+        return (type == UNIT_TYPEID::PROTOSS_NEXUS);
+    }
+
     bool addNewPylonSlot() {
         for (int i = 1; i < pylons.size(); i++) {
             for (int j = 0; j < 4; j ++) {
@@ -55,6 +65,7 @@ public:
                 Point2D potential(pylons[i].x + cos(angle) * 6.2,pylons[i].y + sin(angle) * 6.2);
                 if (Query()->Placement(ABILITY_ID::BUILD_PYLON, potential)) {
                     pylons.push_back(potential);
+                    generatePlacement(potential, 2);
                     return true;
                 }
             }
@@ -67,6 +78,7 @@ public:
         int y = p.y - (size / 2);
         for (int i = x; i < x + size; i++) {
             for (int j = y; j < y + size; j++) {
+                printf("{%d,%d}", i, j);
                 imRef(placements, i, j) = 1;
             }
         }
@@ -84,10 +96,13 @@ public:
         return true;
     }
 
-    bool check3x3Placement(Point2D p) {
-        for (int i = -1; i <= 1; i++) {
-            for (int j = -1; j <= 1; j++) {
-                if (!observer->IsPlacable(p + Point2D(i, j))) {
+    bool checkPlacement(Point2D p, int size) {
+        int x = p.x - (size / 2);
+        int y = p.y - (size / 2);
+        for (int i = x; i < x + size; i++) {
+            for (int j = y; j < y + size; j++) {
+                Point2D check(i, j);
+                if (!observer->IsPlacable(check) || imRef(placements, int(check.x), int(check.y))) {
                     return false;
                 }
             }
@@ -95,18 +110,45 @@ public:
         return true;
     }
 
+    bool check3x3Placement(Point2D p) {
+        /*for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                if (!observer->IsPlacable(p + Point2D(i, j)) || imRef(placements, int(p.x + i), int(p.y + j))) {
+                    return false;
+                }
+            }
+        }
+        return true;*/
+        return checkPlacement(p, 3);
+    }
+
+    bool check2x2Placement(Point2D p) {
+        /*for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                if (!observer->IsPlacable(p + Point2D(i, j)) || imRef(placements, int(p.x + i), int(p.y + j))) {
+                    return false;
+                }
+            }
+        }
+        return true;*/
+        return checkPlacement(p, 2);
+    }
+
     bool addNewBuildingSlot() {
-        for (int i = 1; i < pylons.size(); i++) {
+        Units pyl = Observation()->GetUnits(Unit::Alliance::Self, isPylon);
+        for (int i = 0; i < pyl.size(); i++) {
             for (int j = 0; j < 4; j++) {
                 float angle = j * PI / 2;
-                Point2D potential(pylons[i].x + cos(angle) * 3, pylons[i].y + sin(angle) * 3);
+                Point2D potential(pyl[i]->pos.x + cos(angle) * 3, pyl[i]->pos.y + sin(angle) * 3);
                 printf("[%.1f, %.1f]", potential.x, potential.y);
-                if (Query()->Placement(ABILITY_ID::BUILD_GATEWAY, potential)) {
+                if (checkPlacement(potential, 3)) {
                     printf("YES");
                     imRef(display, int(potential.x), int(potential.y)) = strprintf("YES");
                     buildingSpots.push_back(potential);
+                    generatePlacement(potential, 3);
                     return true;
                 } else {
+                    printf("NO");
                     imRef(display, int(potential.x), int(potential.y)) = strprintf("NO");
                 }
             }
@@ -118,6 +160,12 @@ public:
         if (buildingSpots.size() <= buildSpotIndex)
             addNewBuildingSlot();
         return buildingSpots[buildSpotIndex++];
+    }
+
+    Point2D getPylonSpot() {
+        if (pylons.size() <= pylonIndex)
+            addNewPylonSlot();
+        return pylons[pylonIndex++];
     }
 
     const Unit* FindNearestMineralPatch(const Point2D& start) {
@@ -148,13 +196,25 @@ public:
         return target;
     }
 
-    const Unit* FindNearestVespene(const Point2D& start) {
+    const Unit* FindNearestVespene(const Point2D& start, float range = 100) {
         Units units = Observation()->GetUnits(Unit::Alliance::Neutral, Probe::isVespene);
-        float distance = std::numeric_limits<float>::max();
+        Units assimilators = Observation()->GetUnits(Unit::Alliance::Self, Probe::isAssimilator);
+        float distance = range;
+        if (distance == 0)
+            distance = std::numeric_limits<float>::max();
         const Unit* target = nullptr;
         for (const auto& u : units) {
             float d = DistanceSquared2D(u->pos, start);
-            if (d < distance) {
+            
+            bool assim = false;
+            for (int i = 0; i < assimilators.size(); i++) {
+                if (DistanceSquared2D(u->pos, assimilators[i]->pos) < 1) {
+                    assim = true;
+                    break;
+                }
+            }
+            printf("<%.1f %d %d>\n", d, !assim, !imRef(placements, int(u->pos.x), int(u->pos.y)));
+            if (!assim && d < distance && !imRef(placements, int(u->pos.x), int(u->pos.y))) {
                 distance = d;
                 target = u;
             }
@@ -163,6 +223,8 @@ public:
         if (distance == std::numeric_limits<float>::max()) {
             return target;
         }
+        if (target != nullptr)
+            generatePlacement(target->pos, 3);
         return target;
     }
 
@@ -382,7 +444,20 @@ public:
             Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER, mineral_target->tag);
         } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_NEXUS) {
             Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, P2D(unit->pos));
-        }
+            generatePlacement(P2D(unit->pos), 5);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_PYLON) {
+            generatePlacement(P2D(unit->pos), 2);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_GATEWAY) {
+            generatePlacement(P2D(unit->pos), 3);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_CYBERNETICSCORE) {
+            generatePlacement(P2D(unit->pos), 3);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_ASSIMILATOR) {
+            generatePlacement(P2D(unit->pos), 3);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY) {
+            generatePlacement(P2D(unit->pos), 3);
+        } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL) {
+            generatePlacement(P2D(unit->pos), 3);
+        } 
 
     }
 
@@ -430,16 +505,16 @@ public:
         map<float>* dist_t = dt(pathinggrid, mapWidth, mapHeight);
 
         Point2D center = observer->GetCameraPos();
-        int wS = int(center.x) - 7;
+        int wS = int(center.x) - 8;
         if (wS < 0)
             wS = 0;
         int hS = int(center.y) - 3;
         if (hS < 0)
             hS = 0;
-        int wE = int(center.x) + 8;
+        int wE = int(center.x) + 9;
         if (wE > mapWidth)
             wE = mapWidth;
-        int hE = int(center.y) + 4;
+        int hE = int(center.y) + 6;
         if (hE > mapHeight)
             hE = mapHeight;
 
@@ -466,7 +541,7 @@ public:
                     c.r = 115;
                     c.g = 125;
                     c.b = 220;
-                } else if (0 && placementgrid.IsPlacable(point) && pathinggrid.IsPathable(point)) {
+                } else if (1 && placementgrid.IsPlacable(point) && pathinggrid.IsPathable(point)) {
                     c.r = 40;
                     c.g = 40;
                     c.b = 40;
@@ -475,18 +550,28 @@ public:
                     c.g = 65;
                     c.b = 25;
                 }
+
+                
                 #define BOX_BORDER 0.02
-                if (!(c.r == 255 && c.g == 255 && c.b == 255) || imRef(display, w, h) != "") {
+
+                float displace = 0;
+                if (imRef(placements, w, h) == 1) {
+                    displace = 3;
+                }
+
+                if (!(c.r == 255 && c.g == 255 && c.b == 255) || imRef(display, w, h) != "" || displace != 0) {
                     float height = heightmap.TerrainHeight(point);
-                    Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
+                    
+                    Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01 + displace),
                                          Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
                     Debug()->DebugTextOut(strprintf("%d, %d", w, h),
-                                          Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
+                                          Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1 + displace),
                                           Color(200, 90, 15),
                                           fontSize);
                     std::string cs = imRef(display, w, h);
                     float disp = cs.length() * 0.0667 * fontSize / 15;
-                    Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1), Color(200, 190, 115),
+                    Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1 + displace),
+                                          Color(200, 190, 115),
                                           fontSize);
                 }
             }
@@ -495,18 +580,6 @@ public:
     }
 
     void orders() {
-        //Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
-        //for (const Unit* unit : units) {
-        //    int i = 0;
-        //    UnitOrders all = OrderQueue::getAllOrders()[unit->tag];
-        //    std::string cs = "";
-        //    for (auto it = all.begin(); it != all.end(); ++it) {
-        //        cs.append(strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it->ability_id), it->target_unit_tag,
-        //                            it->target_pos.x, it->target_pos.y, it->progress));
-        //        // printf("%s", cs.c_str());
-        //        Debug()->DebugTextOut(cs, unit->pos, Color(200, 190, 115), 8);
-        //    }
-        //}
         for (auto it = probes.begin(); it != probes.end(); it++) {
             auto all = it->second.buildings;
             
@@ -531,30 +604,15 @@ public:
     }
 
     void tags() {
-        // Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
-        // for (const Unit* unit : units) {
-        //     int i = 0;
-        //     UnitOrders all = OrderQueue::getAllOrders()[unit->tag];
-        //     std::string cs = "";
-        //     for (auto it = all.begin(); it != all.end(); ++it) {
-        //         cs.append(strprintf("%s %ul [%.1f,%.1f] %.2f\n", AbilityTypeToName(it->ability_id),
-        //         it->target_unit_tag,
-        //                             it->target_pos.x, it->target_pos.y, it->progress));
-        //         // printf("%s", cs.c_str());
-        //         Debug()->DebugTextOut(cs, unit->pos, Color(200, 190, 115), 8);
-        //     }
-        // }
-
-
         /*sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
         for (auto u : units) {
             Debug()->DebugTextOut(strprintf("%s %lx", UnitTypeToName(u->unit_type), u->tag), u->pos,
                                   Color(200, 190, 115), 12);
         }*/
-        sc2::Units neutrals = observer->GetUnits(sc2::Unit::Alliance::Neutral);
+        sc2::Units neutrals = observer->GetUnits(sc2::Unit::Alliance::Neutral, Probe::isMineral);
         for (auto u : neutrals) {
             Debug()->DebugTextOut(strprintf("%lx:\n %d", u->tag, mineralTargetting[u->tag]),
-                                  u->pos, Color(200, 190, 115), 12);
+                                  u->pos, Color(200, 190, 115), 8);
         }
     }
 
@@ -612,6 +670,8 @@ public:
         tags();
         buildingUnits();
         actionQueue();
+        Debug()->DebugTextOut(strprintf("GL:%d %.1fs", observer->GetGameLoop(), observer->GetGameLoop()/22.4),
+                              Point2D(0.3, 0.01), Color(100, 190, 215), 8);
         Debug()->SendDebug();
 
         /*for (auto it = probes.begin(); it != probes.end(); it++) {
@@ -625,40 +685,43 @@ public:
         }*/
 
         MacroQueue::execute(this);
+
         //Debug()->DebugTextOut(strprintf("%d", observer->GetGameLoop()));
 
-        
-
-        switch (observer->GetGameLoop()) {
-            case (20): {
-                const Unit* vesp = FindNearestVespene(startLocation);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, pylons[pylonIndex++]}, this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, getBuildingSpot()}, this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y + 0.5)},this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, getBuildingSpot()}, this);
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, pylons[pylonIndex++]}, this);
-                MacroQueue::addUpgrade(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE, this);
-                MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
-                MacroQueue::addBuilding({ABILITY_ID::BUILD_ROBOTICSFACILITY, NullTag, getBuildingSpot()}, this);
-                MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
-                MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
-                break;
-            }
-            default: {
-                if (observer->GetGameLoop() > 3600) {
-                    if (observer->GetFoodCap() < 200 && observer->GetFoodCap() - 3 < observer->GetFoodUsed() &&
-                        MacroQueue::actions.front().ability_id != ABILITY_ID::BUILD_PYLON) {
-                        while (pylonIndex >= pylons.size()) {
-                            addNewPylonSlot();
-                        }
-                        MacroQueue::addPylon(pylons[pylonIndex++], this);
+        if (observer->GetGameLoop() == 20) {
+            const Unit* vesp = FindNearestVespene(startLocation);
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, getPylonSpot()}, this);
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, getBuildingSpot()}, this);
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
+            MacroQueue::addBuilding(
+                {ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y + 0.5)}, this);
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, getBuildingSpot()}, this);
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, getPylonSpot()}, this);
+            MacroQueue::addUpgrade(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE, this);
+            MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+        } else if (observer->GetGameLoop() == 2600) {
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_ROBOTICSFACILITY, NullTag, getBuildingSpot()}, this);
+            MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_TWILIGHTCOUNCIL, NullTag, getBuildingSpot()}, this);
+            MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+        } else {
+            if (observer->GetGameLoop() > 2600) {
+                if (observer->GetFoodCap() < 200 && observer->GetFoodCap() - 3 < observer->GetFoodUsed() &&
+                    (MacroQueue::actions.size() == 0 ||
+                     MacroQueue::actions.front().ability_id != ABILITY_ID::BUILD_PYLON)) {
+                    while (pylonIndex >= pylons.size()) {
+                        addNewPylonSlot();
                     }
+                    MacroQueue::addPylon(pylons[pylonIndex++], this);
                 }
-                if (buildSpotIndex < buildingSpots.size() - 1) {
-                    addNewBuildingSlot();
+            }
+            Units nexi = Observation()->GetUnits(Unit::Alliance::Self, isNexus);
+            for (const Unit *nexus : nexi) {
+                if (nexus->assigned_harvesters >= 14) {
+                    const Unit* vesp = FindNearestVespene(nexus->pos);
+                    if (vesp != nullptr)
+                        MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
                 }
-                break;
             }
         }
             
@@ -726,6 +789,10 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+//fix probe targetting
+//fix probe build-check
+//fix assimilator condition
+//have both 
 //add generator to global variables
 //if near supply cap, save for pylon
 //add place-able check to actionQueue
