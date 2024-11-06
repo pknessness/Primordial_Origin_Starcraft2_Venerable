@@ -45,9 +45,24 @@ namespace MacroQueue {
         return true;
     }
 
+    static bool addPylon(Point2D point, Agent *agent) {
+        unitTypes.push_front(UNIT_TYPEID::PROTOSS_PROBE);
+        actions.push_front({ABILITY_ID::BUILD_PYLON, NullTag, point});
+        costs.push_front(Aux::buildAbilityToCost(ABILITY_ID::BUILD_PYLON, agent));
+        return true;
+    }
+
     static bool execute(Agent *agent) {
         int theoreticalMinerals = agent->Observation()->GetMinerals();
         int theoreticalVespene = agent->Observation()->GetVespene();
+
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            for (auto b = it->second.buildings.begin(); b != it->second.buildings.end(); b++) {
+                Cost c = Aux::buildAbilityToCost(b->ability_id, agent);
+                theoreticalMinerals -= c.minerals;
+                theoreticalVespene -= c.vespene;
+            }
+        }
 
         if (costs.size() == 0 || actions.size() == 0 || unitTypes.size() == 0) {
             return false;
@@ -143,27 +158,35 @@ namespace MacroQueue {
 
         //printf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
         //       cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite);
-
+        printf("%s [%lx] [%.1f, %.1f] M%d/%d[%d] V%d/%d[%d] PRE:%s? [%d]\n", AbilityTypeToName(action.ability_id),
+               action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals, cost.minerals,
+               cost.minerals <= theoreticalMinerals, theoreticalVespene, cost.vespene,
+               cost.vespene <= theoreticalVespene, UnitTypeToName(prereq), prerequisite);
         agent->Debug()->DebugTextOut(
-            strprintf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id),
-                      action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
-                      cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite),
+            strprintf("%s [%lx] [%.1f, %.1f] \nM%d/%d[%d] V%d/%d[%d] \nPRE:%s? [%d]\n", AbilityTypeToName(action.ability_id),
+                      action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals, cost.minerals, cost.minerals <= theoreticalMinerals,
+                      theoreticalVespene, cost.vespene, cost.vespene <= theoreticalVespene, UnitTypeToName(prereq),
+                      prerequisite),
                               Point2D(0.01, 0.6), Color(100, 190, 215), 8);
 
-        if (cost.minerals <= theoreticalMinerals && cost.vespene <= theoreticalVespene && prerequisite) {
+        if (int(cost.minerals) <= theoreticalMinerals && int(cost.vespene) <= theoreticalVespene && prerequisite) {
             if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
                 agent->Actions()->UnitCommand(un, ABILITY_ID::STOP, false);
                 probes[un->tag].addBuilding(action.ability_id,action.target_pos, action.target_unit_tag);
             } else {
-                if (action.target_unit_tag == NullTag) {
-                    agent->Actions()->UnitCommand(un, action.ability_id, action.target_pos,
-                                                  false);
-                } else if(action.target_pos.x != 0 || action.target_pos.y != 0){
+                if (action.target_unit_tag != NullTag) {
                     const Unit *target = agent->Observation()->GetUnit(action.target_unit_tag);
                     agent->Actions()->UnitCommand(un, action.ability_id, target, false);
+                    printf("%s EXECUTING ACTION %s on [%lx] [%.1f, %.1f]\n", UnitTypeToName(un->unit_type),
+                           AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x,
+                           action.target_pos.y);
+                } else if(action.target_pos.x != 0 || action.target_pos.y != 0){
+                    agent->Actions()->UnitCommand(un, action.ability_id, action.target_pos, false);
+                    printf("%s EXECUTING ACTION %s at [%.1f, %.1f]\n", UnitTypeToName(un->unit_type),
+                           AbilityTypeToName(action.ability_id), action.target_pos.x, action.target_pos.y);
                 } else {
-
                     agent->Actions()->UnitCommand(un, action.ability_id, false);
+                    printf("%s EXECUTING ACTION %s\n", UnitTypeToName(un->unit_type), AbilityTypeToName(action.ability_id));
                 }
             }
 

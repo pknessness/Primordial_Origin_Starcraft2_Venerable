@@ -7,6 +7,8 @@
 
 using namespace sc2;
 
+std::map<uint64_t, int> mineralTargetting;
+
 class Probe {
 public:
     Tag minerals;
@@ -35,6 +37,11 @@ public:
 
     bool init(Tag minerals_) {
         minerals = minerals_;
+        if (mineralTargetting.find(minerals_) == mineralTargetting.end()) {
+            mineralTargetting[minerals_] = 1;
+        } else {
+            mineralTargetting[minerals_] += 1;
+        }
         return true;
     }
 
@@ -76,10 +83,10 @@ public:
             }
             buildings.pop_front();
             return true;
-        } else if (unit->orders.size() == 0 || unit->orders[0].ability_id == ABILITY_ID::HARVEST_GATHER ||
-                   buildings.size() == 0) {
+        }
+        if (buildings.size() == 0) {
             const Unit *target = agent->Observation()->GetUnit(minerals);
-            agent->Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER, target, false);
+            agent->Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER, target, true);
             return true;
         }
         return false;
