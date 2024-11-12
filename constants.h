@@ -24,6 +24,11 @@ std::string strprintf(const std::string &format, Args... args) {
 }
 
 namespace Aux {
+
+static bool checkPathable(int x, int y, Agent *agent) {
+    return agent->Observation()->IsPathable({float(x), float(y)});
+}
+
 static bool isPylon(const Unit &unit) {
     UnitTypeID type = unit.unit_type;
     return (type == UNIT_TYPEID::PROTOSS_PYLON);

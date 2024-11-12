@@ -1,13 +1,29 @@
 #include <sc2api/sc2_api.h>
 
 #include <iostream>
+#include "jps.hpp"
+#include "grid.hpp"
+#include "tools.hpp"
+#include "constants.h"
 
 using namespace sc2;
 
 class Bot : public Agent {
 public:
     virtual void OnGameStart() final {
-        
+        const ObservationInterface* observe = Observation();
+        //PathFinder pf(observe->GetGameInfo().width, observe->GetGameInfo().height);
+        //cout << pf.findPath(observe->GetGameInfo().start_locations[0], observe->GetGameInfo().enemy_start_locations[0], this) << endl;
+        unordered_set<Location> walls{{5, 0}, {5, 1}, {2, 2}, {5, 2}, {2, 3}, {5, 3}, {2, 4}, {5, 4},
+                                      {2, 5}, {4, 5}, {5, 5}, {6, 5}, {7, 5}, {2, 6}, {2, 7}};
+        Grid map{10, 10, walls};
+
+        Location start{1, 1};
+        Location goal{6, 2};
+
+        auto came_from = jps(map, start, goal, Tool::euclidean);
+        auto path = Tool::reconstruct_path(start, goal, came_from);
+        Tool::draw_grid(map, {}, {}, path, came_from, start, goal);
     }
 
     virtual void OnUnitCreated(const Unit* unit) {
