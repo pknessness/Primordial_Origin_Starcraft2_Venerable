@@ -23,6 +23,14 @@ std::string strprintf(const std::string &format, Args... args) {
     return std::string(buf.get(), buf.get() + size - 1);  // We don't want the '\0' inside
 }
 
+Point2D P2D(const Point2DI &p) {
+    return Point2D(p.x, p.y);
+}
+
+Point2D P2D(const Point3D &p) {
+    return Point2D(p.x, p.y);
+}
+
 namespace Aux {
 
 static bool checkPathable(int x, int y, Agent *agent) {

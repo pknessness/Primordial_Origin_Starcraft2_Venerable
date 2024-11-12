@@ -1,5 +1,5 @@
 #pragma once
-
+#include <sc2api/sc2_api.h>
 #include <cmath>
 #include <algorithm>
 #include <iomanip>
@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "grid.hpp"
+
+using namespace sc2;
 
 namespace Tool {
     inline double manhattan(const Location& a, const Location& b) {
@@ -19,7 +21,7 @@ namespace Tool {
     std::vector<Location> reconstruct_path(const Location& start, const Location& goal,
                 const std::unordered_map<Location, Location>& came_from);
 
-    void draw_grid(const Grid& grid, const std::unordered_map<Location, double>& distances = {},
+    void draw_grid(Agent* agent, const Grid& grid, const std::unordered_map<Location, double>& distances = {},
                 const std::unordered_map<Location, Location>& point_to = {}, const std::vector<Location>& path = {},
                 const std::unordered_map<Location, Location>& came_from = {}, const Location& start = NoneLoc,
                 const Location& goal = NoneLoc);
@@ -49,7 +51,7 @@ vector<Location> Tool::reconstruct_path(const Location& start, const Location& g
 // arrows that point to the parent location, or pass in a path vector
 // if you want to draw the path, or pass a came_from map to print jump
 // point nodes
-void Tool::draw_grid(const Grid& grid, const unordered_map<Location, double>& distances,
+void Tool::draw_grid(Agent* agent, const Grid& grid, const unordered_map<Location, double>& distances,
                      const unordered_map<Location, Location>& point_to, const vector<Location>& path,
                      const unordered_map<Location, Location>& came_from, const Location& start, const Location& goal) {
     const int field_width = 3;
@@ -57,7 +59,7 @@ void Tool::draw_grid(const Grid& grid, const unordered_map<Location, double>& di
     for (int y = 0; y != grid.get_heigth(); ++y) {
         for (int x = 0; x != grid.get_width(); ++x) {
             const Location id{x, y};
-            if (grid.walls.find(id) != grid.walls.end()) {
+            if (!Aux::checkPathable(x, y, agent)) {
                 cout << string(field_width, '#');
             } else if (start != NoneLoc && id == start) {
                 cout << " A ";

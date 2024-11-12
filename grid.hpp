@@ -1,8 +1,11 @@
 #pragma once
-
+#include <sc2api/sc2_api.h>
 #include <iostream>
 #include <vector>
 #include <unordered_set>
+#include "constants.h"
+
+using namespace sc2;
 
 struct Location
 {
@@ -42,21 +45,23 @@ private:
 	int width, height;
 
 public:
-	std::unordered_set<Location> walls;
+	//std::unordered_set<Location> walls;
 
 	Grid() {};
-	Grid(int width_, int height_, std::unordered_set<Location> walls_) : width(width_), height(height_), walls(walls_) {};
+	Grid(int width_, int height_/*, std::unordered_set<Location> walls_*/) : width(width_), height(height_)/*, walls(walls_)*/ {};
 
 	int get_width() const {return width;};
 	int get_heigth() const {return height;};
 
 	bool in_bounds(const Location& loc) const noexcept { return 0 <= loc.x && loc.x < width && 0 <= loc.y && loc.y < height; };
-	bool passable(const Location& loc) const { return walls.find(loc) == walls.end(); };
-	bool valid_move(const Location& loc, const Location& dir) const;
+    bool passable(const Location& loc, Agent *agent) const {
+                    return Aux::checkPathable(loc.x, loc.y, agent);
+    };
+	bool valid_move(const Location& loc, const Location& dir, Agent *agent) const;
 	bool forced(const Location& loc, const Location& parent, const Location& travel_dir) const;
 
-	std::vector<Location> neighbours(const Location& current, const std::vector<Location>& dirs) const;
-	std::vector<Location> pruned_neighbours(const Location& current, const Location& parent) const;
+	std::vector<Location> neighbours(const Location& current, const std::vector<Location>& dirs, Agent* agent) const;
+        std::vector<Location> pruned_neighbours(const Location& current, const Location& parent, Agent* agent) const;
 };
 
 using namespace std;
@@ -136,30 +141,29 @@ bool Grid::forced(const Location& loc, const Location& parent, const Location& t
 	return false;
 }
 
-bool Grid::valid_move(const Location& loc, const Location& dir) const{
+bool Grid::valid_move(const Location& loc, const Location& dir, Agent* agent) const {
 	const auto next_loc = loc + dir;
 	if(dir.x != 0 && dir.y != 0){
-		return in_bounds(next_loc) && passable(next_loc)
-			&& (passable(loc + Location{dir.x, 0}) || passable(loc + Location{0, dir.y}));
+		return in_bounds(next_loc) && passable(next_loc, agent) &&
+                       (passable(loc + Location{dir.x, 0}, agent) || passable(loc + Location{0, dir.y}, agent));
 	}
-	return in_bounds(next_loc) && passable(next_loc);
+        return in_bounds(next_loc) && passable(next_loc, agent);
 };
 
-vector<Location> Grid::neighbours(const Location& current, const std::vector<Location>& dirs) const
-{
+vector<Location> Grid::neighbours(const Location& current, const std::vector<Location>& dirs, Agent* agent) const {
 	vector<Location> results;
 	for(auto& dir : dirs){
-		if(valid_move(current, dir)){
+		if (valid_move(current, dir, agent)) {
 			results.push_back(current + dir);
 		}
 	}
 	return results;
 }
 
-vector<Location> Grid::pruned_neighbours(const Location& current, const Location& parent) const
+vector<Location> Grid::pruned_neighbours(const Location& current, const Location& parent, Agent *agent) const
 {
 	if(parent == NoneLoc){
-		return neighbours(current, ALL_DIRS);
+		return neighbours(current, ALL_DIRS, agent);
 	}
 	vector<Location> current_neighbours;
 	const auto dir {(current - parent).direction()};
@@ -169,12 +173,13 @@ vector<Location> Grid::pruned_neighbours(const Location& current, const Location
 		const Location dir_y {0, dir.y};
 
 		// Add natural neighbours
-		current_neighbours = neighbours(current, {dir, dir_x, dir_y});
+        current_neighbours = neighbours(current, {dir, dir_x, dir_y}, agent);
 
 		// Add forced neighbours
 		for(const auto& candidate_dir : {dir_x, dir_y}){
 			const auto previous = current - dir;
-			if(!valid_move(previous, candidate_dir) && valid_move(previous, 2 * candidate_dir)){
+            if (!valid_move(previous, candidate_dir, agent) &&
+                            valid_move(previous, 2 * candidate_dir, agent)) {
  				current_neighbours.push_back(previous + 2 * candidate_dir);
 			}
 		}
@@ -183,14 +188,14 @@ vector<Location> Grid::pruned_neighbours(const Location& current, const Location
 	else
 	{
 		// Add natural neighbours
-		current_neighbours = neighbours(current, {dir});
+        current_neighbours = neighbours(current, {dir}, agent);
 
 		// Add forced neighbours
 		const Location inverted_dir {dir.y, dir.x};
-		if(!valid_move(current, inverted_dir) && valid_move(current, inverted_dir + dir)){
+        if (!valid_move(current, inverted_dir, agent) && valid_move(current, inverted_dir + dir, agent)) {
 			current_neighbours.push_back(current + inverted_dir + dir);
 		}
-		if(!valid_move(current, -inverted_dir) && valid_move(current, -inverted_dir + dir)){
+        if (!valid_move(current, -inverted_dir, agent) && valid_move(current, -inverted_dir + dir, agent)) {
 			current_neighbours.push_back(current - inverted_dir + dir);
 		}
 	}

@@ -2,47 +2,49 @@
 #include <unordered_map>
 #include <vector>
 #include <iostream>
+#include <sc2api/sc2_api.h>
 
 #include "grid.hpp"
 #include "tools.hpp"
 
 
 using namespace std;
+using namespace sc2;
 
 typedef pair<double, Location> PQElement;
 typedef priority_queue<PQElement, vector<PQElement>, greater<PQElement>> PQLoc;
 
 typedef double(heuristic_fn)(const Location&, const Location&);
 
-Location jump(const Grid& grid, const Location initial, const Location dir, const Location goal) {
+Location jump(const Grid& grid, const Location initial, const Location dir, const Location goal, Agent *agent) {
     auto new_loc{initial + dir};
-    if (!grid.valid_move(initial, dir)) {
+    if (!grid.valid_move(initial, dir, agent)) {
         return NoneLoc;
     }
     if (new_loc == goal) {
         return new_loc;
     }
-    for (const auto next : grid.pruned_neighbours(new_loc, initial)) {
+    for (const auto next : grid.pruned_neighbours(new_loc, initial, agent)) {
         if (grid.forced(next, new_loc, dir)) {
             return new_loc;
         }
     }
     if (dir.x != 0 && dir.y != 0) {
         for (const auto& new_dir : {Location{dir.x, 0}, Location{0, dir.y}}) {
-            auto jump_point{jump(grid, new_loc, new_dir, goal)};
+            auto jump_point{jump(grid, new_loc, new_dir, goal, agent)};
             if (jump_point != NoneLoc) {
                 return new_loc;
             }
         }
     }
-    return jump(grid, new_loc, dir, goal);
+    return jump(grid, new_loc, dir, goal, agent);
 }
 
-vector<Location> successors(const Grid& grid, const Location& current, const Location& parent, const Location& goal) {
+vector<Location> successors(const Grid& grid, const Location& current, const Location& parent, const Location& goal, Agent *agent) {
     vector<Location> successors;
-    auto neighbours{grid.pruned_neighbours(current, parent)};
+    auto neighbours{grid.pruned_neighbours(current, parent, agent)};
     for (const auto& n : neighbours) {
-        auto jump_point{jump(grid, current, (n - current).direction(), goal)};
+        auto jump_point{jump(grid, current, (n - current).direction(), goal, agent)};
         if (jump_point != NoneLoc) {
             successors.push_back(jump_point);
         }
@@ -51,7 +53,7 @@ vector<Location> successors(const Grid& grid, const Location& current, const Loc
 }
 
 unordered_map<Location, Location> jps(const Grid& grid, const Location& start, const Location& goal,
-                                      heuristic_fn heuristic) {
+                                      heuristic_fn heuristic, Agent* agent) {
     PQLoc open_set;
     unordered_map<Location, Location> came_from{};
     unordered_map<Location, double> cost_so_far{};
@@ -72,7 +74,7 @@ unordered_map<Location, Location> jps(const Grid& grid, const Location& start, c
             parent = came_from[current];
         }
 
-        for (const auto& next : successors(grid, current, parent, goal)) {
+        for (const auto& next : successors(grid, current, parent, goal, agent)) {
             const auto new_cost = cost_so_far[current] + heuristic(current, next);
             auto existing_cost = std::numeric_limits<double>::max();
             if (cost_so_far.count(next)) {
