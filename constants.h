@@ -24,6 +24,16 @@ std::string strprintf(const std::string &format, Args... args) {
 }
 
 namespace Aux {
+static bool isPylon(const Unit &unit) {
+    UnitTypeID type = unit.unit_type;
+    return (type == UNIT_TYPEID::PROTOSS_PYLON);
+}
+
+static bool isNexus(const Unit &unit) {
+    UnitTypeID type = unit.unit_type;
+    return (type == UNIT_TYPEID::PROTOSS_NEXUS);
+}
+
 static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {
     switch (uint32_t(build_ability)) {
         case (uint32_t(ABILITY_ID::BUILD_ASSIMILATOR)):
@@ -56,6 +66,58 @@ static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {
             return UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE;
         case (uint32_t(ABILITY_ID::BUILD_TWILIGHTCOUNCIL)):
             return UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL;
+        case(uint32_t(ABILITY_ID::TRAINWARP_ADEPT)):
+	        return UNIT_TYPEID::PROTOSS_ADEPT;
+        case(uint32_t(ABILITY_ID::TRAINWARP_DARKTEMPLAR)):
+	        return UNIT_TYPEID::PROTOSS_DARKTEMPLAR;
+        case(uint32_t(ABILITY_ID::TRAINWARP_HIGHTEMPLAR)):
+            return UNIT_TYPEID::PROTOSS_HIGHTEMPLAR;
+        case(uint32_t(ABILITY_ID::TRAINWARP_SENTRY)):
+            return UNIT_TYPEID::PROTOSS_SENTRY;
+        case(uint32_t(ABILITY_ID::TRAINWARP_STALKER)):
+            return UNIT_TYPEID::PROTOSS_STALKER;
+        case(uint32_t(ABILITY_ID::TRAINWARP_ZEALOT)):
+            return UNIT_TYPEID::PROTOSS_ZEALOT;
+        case(uint32_t(ABILITY_ID::TRAIN_ADEPT)):
+            return UNIT_TYPEID::PROTOSS_ADEPT;
+        case(uint32_t(ABILITY_ID::TRAIN_ARCHON)):
+            return UNIT_TYPEID::PROTOSS_ARCHON;
+        case(uint32_t(ABILITY_ID::TRAIN_CARRIER)):
+            return UNIT_TYPEID::PROTOSS_CARRIER;
+        case(uint32_t(ABILITY_ID::TRAIN_COLOSSUS)):
+            return UNIT_TYPEID::PROTOSS_COLOSSUS;
+        case(uint32_t(ABILITY_ID::TRAIN_DARKTEMPLAR)):
+            return UNIT_TYPEID::PROTOSS_DARKTEMPLAR;
+        case(uint32_t(ABILITY_ID::TRAIN_DISRUPTOR)):
+            return UNIT_TYPEID::PROTOSS_DISRUPTOR;
+        case(uint32_t(ABILITY_ID::TRAIN_HIGHTEMPLAR)):
+            return UNIT_TYPEID::PROTOSS_HIGHTEMPLAR;
+        case(uint32_t(ABILITY_ID::TRAIN_IMMORTAL)):
+            return UNIT_TYPEID::PROTOSS_IMMORTAL;
+        case(uint32_t(ABILITY_ID::TRAIN_MOTHERSHIP)):
+            return UNIT_TYPEID::PROTOSS_MOTHERSHIP;
+        case(uint32_t(ABILITY_ID::TRAIN_MOTHERSHIPCORE)):
+            return UNIT_TYPEID::PROTOSS_MOTHERSHIPCORE;
+        case(uint32_t(ABILITY_ID::TRAIN_OBSERVER)):
+            return UNIT_TYPEID::PROTOSS_OBSERVER;
+        case(uint32_t(ABILITY_ID::TRAIN_ORACLE)):
+            return UNIT_TYPEID::PROTOSS_ORACLE;
+        case(uint32_t(ABILITY_ID::TRAIN_PHOENIX)):
+            return UNIT_TYPEID::PROTOSS_PHOENIX;
+        case(uint32_t(ABILITY_ID::TRAIN_PROBE)):
+            return UNIT_TYPEID::PROTOSS_PROBE;
+        case(uint32_t(ABILITY_ID::TRAIN_SENTRY)):
+            return UNIT_TYPEID::PROTOSS_SENTRY;
+        case(uint32_t(ABILITY_ID::TRAIN_STALKER)):
+            return UNIT_TYPEID::PROTOSS_STALKER;
+        case(uint32_t(ABILITY_ID::TRAIN_TEMPEST)):
+            return UNIT_TYPEID::PROTOSS_TEMPEST;
+        case(uint32_t(ABILITY_ID::TRAIN_VOIDRAY)):
+            return UNIT_TYPEID::PROTOSS_VOIDRAY;
+        case(uint32_t(ABILITY_ID::TRAIN_WARPPRISM)):
+            return UNIT_TYPEID::PROTOSS_WARPPRISM;
+        case(uint32_t(ABILITY_ID::TRAIN_ZEALOT)):
+            return UNIT_TYPEID::PROTOSS_ZEALOT;
         default:
             return 0;
     }
@@ -191,6 +253,12 @@ static int structureDiameter(UnitTypeID type) {
     PROTOSS_SHIELDBATTERY = 1910, PROTOSS_STARGATE = 67,
     PROTOSS_TEMPLARARCHIVE = 68, PROTOSS_TWILIGHTCOUNCIL = 65,
     PROTOSS_WARPGATE = 133,*/
+}
+
+static int theorySupply(Agent *agent) {
+    Units nexi = agent->Observation()->GetUnits(Unit::Alliance::Self, Aux::isNexus);
+    Units pylons = agent->Observation()->GetUnits(Unit::Alliance::Self, Aux::isPylon);
+    return (nexi.size() * 15) + (pylons.size() * 8);
 }
 
 }  // namespace Aux

@@ -45,6 +45,13 @@ namespace MacroQueue {
         return true;
     }
 
+    static bool buildUnit(UnitTypeID unit_type, UnitOrder order, Agent *agent) {
+        unitTypes.push_back(unit_type);
+        actions.push_back(order);
+        costs.push_back(Aux::buildAbilityToCost(order.ability_id, agent));
+        return true;
+    }
+
     static bool addPylon(Point2D point, Agent *agent) {
         unitTypes.push_front(UNIT_TYPEID::PROTOSS_PROBE);
         actions.push_front({ABILITY_ID::BUILD_PYLON, NullTag, point});
@@ -65,6 +72,9 @@ namespace MacroQueue {
         }
 
         if (costs.size() == 0 || actions.size() == 0 || unitTypes.size() == 0) {
+            agent->Debug()->DebugTextOut(
+                strprintf("ONE OF THESE IS EMPTY:\nCOST:[%d] ACTIONS:[%d] UNITTYPE:[%d]", costs.size(), actions.size(), unitTypes.size()), Point2D(0.3, 0.75),
+                                         Color(100, 190, 215), 16);
             return false;
         }
         Cost cost = costs.front();
@@ -120,14 +130,18 @@ namespace MacroQueue {
         } else {
             for (auto u : units) {
                 //printf("-%lx, %s?%s-\n", u->tag, UnitTypeToName(u->unit_type), UnitTypeToName(unitType));
-                if (u->unit_type == unitType) {
+                if (u->unit_type == unitType && u->orders.size() == 0) {
                     un = u;
                     foundUnit = true;
                 }
             }
         }
-        if (!foundUnit)
+        if (!foundUnit) {
+            agent->Debug()->DebugTextOut(
+                strprintf("NO FREE UNIT OF TYPE %s", UnitTypeToName(unitType)),
+                Point2D(0.3, 0.7), Color(100, 190, 215), 16);
             return false;
+        }
 
         if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
             UnitTypeData prereqData = agent->Observation()->GetUnitTypeData().at(
@@ -158,16 +172,16 @@ namespace MacroQueue {
 
         //printf("%s [%xu] [%.1f, %.1f] M%d/%d V%d/%d PRE:%s? %d\n", AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals,
         //       cost.minerals, theoreticalVespene, cost.vespene, UnitTypeToName(prereq), prerequisite);
-        printf("%s [%lx] [%.1f, %.1f] M%d/%d[%d] V%d/%d[%d] PRE:%s? [%d]\n", AbilityTypeToName(action.ability_id),
-               action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals, cost.minerals,
-               cost.minerals <= theoreticalMinerals, theoreticalVespene, cost.vespene,
-               cost.vespene <= theoreticalVespene, UnitTypeToName(prereq), prerequisite);
+        //printf("%s [%lx] [%.1f, %.1f] M%d/%d[%d] V%d/%d[%d] PRE:%s? [%d]\n", AbilityTypeToName(action.ability_id),
+        //       action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals, cost.minerals,
+        //       cost.minerals <= theoreticalMinerals, theoreticalVespene, cost.vespene,
+        //       cost.vespene <= theoreticalVespene, UnitTypeToName(prereq), prerequisite);
         agent->Debug()->DebugTextOut(
             strprintf("%s [%lx] [%.1f, %.1f] \nM%d/%d[%d] V%d/%d[%d] \nPRE:%s? [%d]\n", AbilityTypeToName(action.ability_id),
                       action.target_unit_tag, action.target_pos.x, action.target_pos.y, theoreticalMinerals, cost.minerals, cost.minerals <= theoreticalMinerals,
                       theoreticalVespene, cost.vespene, cost.vespene <= theoreticalVespene, UnitTypeToName(prereq),
                       prerequisite),
-                              Point2D(0.01, 0.6), Color(100, 190, 215), 8);
+                              Point2D(0.3, 0.7), Color(100, 190, 215), 16);
 
         if (int(cost.minerals) <= theoreticalMinerals && int(cost.vespene) <= theoreticalVespene && prerequisite) {
             if (unitType == UNIT_TYPEID::PROTOSS_PROBE) {
@@ -177,7 +191,7 @@ namespace MacroQueue {
                 if (action.target_unit_tag != NullTag) {
                     const Unit *target = agent->Observation()->GetUnit(action.target_unit_tag);
                     agent->Actions()->UnitCommand(un, action.ability_id, target, false);
-                    printf("%s EXECUTING ACTION %s on [%lx] [%.1f, %.1f]\n", UnitTypeToName(un->unit_type),
+                    printf("%s EXECUTING ACTION %s on [%I64x] [%.1f, %.1f]\n", UnitTypeToName(un->unit_type),
                            AbilityTypeToName(action.ability_id), action.target_unit_tag, action.target_pos.x,
                            action.target_pos.y);
                 } else if(action.target_pos.x != 0 || action.target_pos.y != 0){

@@ -16,7 +16,8 @@
 #include <cmath>
 #include "actionQueue.hpp"
 #include "probes.hpp"
-
+#include "armyController.hpp"
+#include "nexus.hpp"
 
 constexpr auto PI = 3.14159263;
 constexpr auto PYLON_RADIUS = 6.5;
@@ -28,6 +29,8 @@ public:
     std::vector<Point3D> expansions;
     std::vector<Point3D> rankedExpansions;
     std::vector<double> expansionOrder;
+    std::vector<Tag> vespene1;
+    std::vector<Tag> vespene2;
 
     const ObservationInterface* observer;
     GameInfo game_info;
@@ -48,22 +51,12 @@ public:
     //std::vector<Point2DI> numberDisplayLoc;
     //std::vector<double> numberDisplay;
 
-    static bool isPylon(const Unit& unit) {
-        UnitTypeID type = unit.unit_type;
-        return (type == UNIT_TYPEID::PROTOSS_PYLON);
-    }
-
-    static bool isNexus(const Unit& unit) {
-        UnitTypeID type = unit.unit_type;
-        return (type == UNIT_TYPEID::PROTOSS_NEXUS);
-    }
-
     bool addNewPylonSlot() {
         for (int i = 1; i < pylons.size(); i++) {
             for (int j = 0; j < 4; j ++) {
                 float angle = 2 * PI * (std::rand() % 8192) / 8192.0;
                 Point2D potential(pylons[i].x + cos(angle) * 6.2,pylons[i].y + sin(angle) * 6.2);
-                if (Query()->Placement(ABILITY_ID::BUILD_PYLON, potential)) {
+                if (checkPlacement(potential, 2)) {
                     pylons.push_back(potential);
                     generatePlacement(potential, 2);
                     return true;
@@ -78,7 +71,7 @@ public:
         int y = p.y - (size / 2);
         for (int i = x; i < x + size; i++) {
             for (int j = y; j < y + size; j++) {
-                printf("{%d,%d}", i, j);
+                //printf("{%d,%d}", i, j);
                 imRef(placements, i, j) = 1;
             }
         }
@@ -110,32 +103,8 @@ public:
         return true;
     }
 
-    bool check3x3Placement(Point2D p) {
-        /*for (int i = -1; i <= 1; i++) {
-            for (int j = -1; j <= 1; j++) {
-                if (!observer->IsPlacable(p + Point2D(i, j)) || imRef(placements, int(p.x + i), int(p.y + j))) {
-                    return false;
-                }
-            }
-        }
-        return true;*/
-        return checkPlacement(p, 3);
-    }
-
-    bool check2x2Placement(Point2D p) {
-        /*for (int i = -1; i <= 1; i++) {
-            for (int j = -1; j <= 1; j++) {
-                if (!observer->IsPlacable(p + Point2D(i, j)) || imRef(placements, int(p.x + i), int(p.y + j))) {
-                    return false;
-                }
-            }
-        }
-        return true;*/
-        return checkPlacement(p, 2);
-    }
-
     bool addNewBuildingSlot() {
-        Units pyl = Observation()->GetUnits(Unit::Alliance::Self, isPylon);
+        Units pyl = Observation()->GetUnits(Unit::Alliance::Self, Aux::isPylon);
         for (int i = 0; i < pyl.size(); i++) {
             for (int j = 0; j < 4; j++) {
                 float angle = j * PI / 2;
@@ -213,7 +182,7 @@ public:
                     break;
                 }
             }
-            printf("<%.1f %d %d>\n", d, !assim, !imRef(placements, int(u->pos.x), int(u->pos.y)));
+            //printf("<%.1f %d %d>\n", d, !assim, !imRef(placements, int(u->pos.x), int(u->pos.y)));
             if (!assim && d < distance && !imRef(placements, int(u->pos.x), int(u->pos.y))) {
                 distance = d;
                 target = u;
@@ -288,13 +257,15 @@ public:
         }
 
         std::vector<double> rankedExpansionOrder;
+        //nexuses.push_back(Nexus(startLocation));
 
         for (int j = 0; j < expansions.size() - 1; j++) {
             if (expansions[j].x == 0 && expansions[j].y == 0)
                 continue;
             //printf("sorting [%2.1f,%2.1f, %2.1f]\n", expansions[j].x, expansions[j].y, expansionOrder[j]);
             if (rankedExpansions.size() == 0){
-                rankedExpansions.push_back(expansions[j]);
+                rankedExpansions.push_back(expansions[j]); //might be useless now
+                //nexuses.push_back(Nexus(expansions[j]));
                 rankedExpansionOrder.push_back(expansionOrder[j]);
                 continue;
             }
@@ -303,7 +274,8 @@ public:
                 //printf("insert into [%2.1f,%2.1f, %2.1f]?\n", rankedExpansions[i].x, rankedExpansions[i].y,
                 //       rankedExpansionOrder[i]);
                 if (rankedExpansionOrder[i] > expansionOrder[j]) {
-                    rankedExpansions.insert(rankedExpansions.begin() + i, expansions[j]);
+                    rankedExpansions.insert(rankedExpansions.begin() + i, expansions[j]); //might be useless now
+                    //nexuses.insert(nexuses.begin() + i, Nexus(expansions[j]));
                     rankedExpansionOrder.insert(rankedExpansionOrder.begin() + i, expansionOrder[j]);
                     imRef(display, int(expansions[j].x), int(expansions[j].y)) = strprintf("%.1f", expansionOrder[j]);
                     inserted = true;
@@ -312,11 +284,29 @@ public:
                 
             }
             if (!inserted) {
-                rankedExpansions.push_back(expansions[j]);
+                rankedExpansions.push_back(expansions[j]); //might be useless now
+                //nexuses.push_back(Nexus(expansions[j]));
                 rankedExpansionOrder.push_back(expansionOrder[j]);
                 imRef(display, int(expansions[j].x), int(expansions[j].y)) = strprintf("%.1f", expansionOrder[j]);
             }
+            //vespene1.push_back(0);
+            //vespene2.push_back(0);
         }
+
+        //for (Nexus n : nexuses) {
+        //    //printf("nexus 1");
+        //    n.init(this);
+        //}
+
+        /*for (int i = 0; i < rankedExpansions.size(); i ++) {
+            const Unit* vesp1 = FindNearestVespene(rankedExpansions[i]);
+            const Unit* vesp2 = FindNearestVespene(rankedExpansions[i]);
+            if (vesp1 != nullptr)
+                vespene1[i] = vesp1->tag;
+            if (vesp2 != nullptr)
+                vespene2[i] = vesp2->tag;
+        }*/
+
         /*for (int i = 0; i < rankedExpansions.size() - 1; i++) {
             printf("{%d,%d, %f} ", ((Point2DI)rankedExpansions[i]).x, ((Point2DI)rankedExpansions[i]).y,
                    rankedExpansionOrder[i]);
@@ -443,6 +433,9 @@ public:
             //Actions()->UnitCommand(unit, ABILITY_ID::STOP);
             Actions()->UnitCommand(unit, ABILITY_ID::HARVEST_GATHER, mineral_target->tag);
         } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_NEXUS) {
+            nexuses.emplace_back(unit->pos);
+            nexuses.back().self = unit->tag;
+            nexuses.back().init(this);
             Actions()->UnitCommand(unit, ABILITY_ID::RALLY_NEXUS, P2D(unit->pos));
             generatePlacement(P2D(unit->pos), 5);
         } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_PYLON) {
@@ -541,7 +534,7 @@ public:
                     c.r = 115;
                     c.g = 125;
                     c.b = 220;
-                } else if (1 && placementgrid.IsPlacable(point) && pathinggrid.IsPathable(point)) {
+                } else if (0 && placementgrid.IsPlacable(point) && pathinggrid.IsPathable(point)) {
                     c.r = 40;
                     c.g = 40;
                     c.b = 40;
@@ -555,9 +548,9 @@ public:
                 #define BOX_BORDER 0.02
 
                 float displace = 0;
-                if (imRef(placements, w, h) == 1) {
+                /*if (imRef(placements, w, h) == 1) {
                     displace = 3;
-                }
+                }*/
 
                 if (!(c.r == 255 && c.g == 255 && c.b == 255) || imRef(display, w, h) != "" || displace != 0) {
                     float height = heightmap.TerrainHeight(point);
@@ -603,13 +596,25 @@ public:
         }
     }
 
+    void ordersOther() {
+        sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
+        for (const Unit* unit : units) {
+            if (unit->orders.size() == 0 || unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE)
+                continue;
+            Debug()->DebugTextOut(strprintf("%s [%lx] [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                          unit->orders[0].target_unit_tag, unit->orders[0].target_pos.x, unit->orders[0].target_pos.y),
+                                  unit->pos,
+                                  Color(200, 110, 115), 8);
+        }
+    }
+
     void tags() {
         /*sc2::Units units = observer->GetUnits(sc2::Unit::Alliance::Self);
         for (auto u : units) {
             Debug()->DebugTextOut(strprintf("%s %lx", UnitTypeToName(u->unit_type), u->tag), u->pos,
                                   Color(200, 190, 115), 12);
         }*/
-        sc2::Units neutrals = observer->GetUnits(sc2::Unit::Alliance::Neutral, Probe::isMineral);
+        sc2::Units neutrals = observer->GetUnits(sc2::Unit::Alliance::Neutral);
         for (auto u : neutrals) {
             Debug()->DebugTextOut(strprintf("%lx:\n %d", u->tag, mineralTargetting[u->tag]),
                                   u->pos, Color(200, 190, 115), 8);
@@ -621,12 +626,20 @@ public:
             //printf("Probe %xu Mineral %xu\n", it->first, it->second.minerals);
             if (observer->GetUnit(it->second.minerals) != nullptr && observer->GetUnit(it->first) != nullptr)
                 Debug()->DebugLineOut(observer->GetUnit(it->second.minerals)->pos + Point3D(0,0,1),
-                                      observer->GetUnit(it->first)->pos + Point3D(0, 0, 1),
-                                      Color(200, 190, 115));
+                                      observer->GetUnit(it->first)->pos + Point3D(0, 0, 1), Color(20, 90, 215));
             else if (observer->GetUnit(it->second.minerals) == nullptr && observer->GetUnit(it->first) != nullptr) {
                 Debug()->DebugLineOut(observer->GetUnit(it->first)->pos,
-                                      observer->GetUnit(it->first)->pos + Point3D(0, 0, 1), Color(200, 190, 115));
+                                      observer->GetUnit(it->first)->pos + Point3D(0, 0, 1), Color(20, 90, 215));
             }
+        }
+    }
+
+    void vespLines() {
+        for (Nexus n : nexuses) {
+            if (observer->GetUnit(n.vesp1) != nullptr)
+                Debug()->DebugLineOut(n.loc + Point3D(0, 0, 3), observer->GetUnit(n.vesp1)->pos + Point3D(0, 0, 3), Color(40, 250, 50));
+            if (observer->GetUnit(n.vesp2) != nullptr)
+                Debug()->DebugLineOut(n.loc + Point3D(0, 0, 3), observer->GetUnit(n.vesp2)->pos + Point3D(0, 0, 3), Color(40, 250, 50));
         }
     }
 
@@ -667,10 +680,12 @@ public:
         grid();
         orders();
         mineralLines();
+        vespLines();
         tags();
         buildingUnits();
         actionQueue();
-        Debug()->DebugTextOut(strprintf("GL:%d %.1fs", observer->GetGameLoop(), observer->GetGameLoop()/22.4),
+        Debug()->DebugTextOut(strprintf("GL:%d %.1fs SUPPLY:%d", observer->GetGameLoop(),
+                                        observer->GetGameLoop() / 22.4, Aux::theorySupply(this)),
                               Point2D(0.3, 0.01), Color(100, 190, 215), 8);
         Debug()->SendDebug();
 
@@ -692,35 +707,58 @@ public:
             const Unit* vesp = FindNearestVespene(startLocation);
             MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, getPylonSpot()}, this);
             MacroQueue::addBuilding({ABILITY_ID::BUILD_GATEWAY, NullTag, getBuildingSpot()}, this);
-            MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
-            MacroQueue::addBuilding(
-                {ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y + 0.5)}, this);
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, nexuses[0].vesp1, observer->GetUnit(nexuses[0].vesp1)->pos}, this);
+            nexuses[0].built1();
+            MacroQueue::addBuilding({ABILITY_ID::BUILD_NEXUS, NullTag, Point2D(rankedExpansions[0].x, rankedExpansions[0].y + 0.5)}, this);
             MacroQueue::addBuilding({ABILITY_ID::BUILD_CYBERNETICSCORE, NullTag, getBuildingSpot()}, this);
             MacroQueue::addBuilding({ABILITY_ID::BUILD_PYLON, NullTag, getPylonSpot()}, this);
             MacroQueue::addUpgrade(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE, this);
             MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+            MacroQueue::addBuilding(
+                {ABILITY_ID::BUILD_ASSIMILATOR, nexuses[0].vesp2, observer->GetUnit(nexuses[0].vesp2)->pos}, this);
+            nexuses[0].built2();
         } else if (observer->GetGameLoop() == 2600) {
             MacroQueue::addBuilding({ABILITY_ID::BUILD_ROBOTICSFACILITY, NullTag, getBuildingSpot()}, this);
             MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
             MacroQueue::addBuilding({ABILITY_ID::BUILD_TWILIGHTCOUNCIL, NullTag, getBuildingSpot()}, this);
             MacroQueue::add(UNIT_TYPEID::PROTOSS_GATEWAY, {ABILITY_ID::TRAIN_STALKER}, {125, 50, 0});
+            MacroQueue::buildUnit(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, {ABILITY_ID::TRAIN_OBSERVER}, this);
+            MacroQueue::buildUnit(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, {ABILITY_ID::TRAIN_IMMORTAL}, this);
         } else {
             if (observer->GetGameLoop() > 2600) {
-                if (observer->GetFoodCap() < 200 && observer->GetFoodCap() - 3 < observer->GetFoodUsed() &&
-                    (MacroQueue::actions.size() == 0 ||
-                     MacroQueue::actions.front().ability_id != ABILITY_ID::BUILD_PYLON)) {
-                    while (pylonIndex >= pylons.size()) {
-                        addNewPylonSlot();
-                    }
-                    MacroQueue::addPylon(pylons[pylonIndex++], this);
+                int foodCap = Aux::theorySupply(this);
+                if (foodCap < 200 && foodCap - 4 < observer->GetFoodUsed()) {
+                    printf("ADD PYLON");
+                    MacroQueue::addPylon(getPylonSpot(), this);
                 }
             }
-            Units nexi = Observation()->GetUnits(Unit::Alliance::Self, isNexus);
+            /*Units nexi = Observation()->GetUnits(Unit::Alliance::Self, Aux::isNexus);
             for (const Unit *nexus : nexi) {
                 if (nexus->assigned_harvesters >= 14) {
                     const Unit* vesp = FindNearestVespene(nexus->pos);
                     if (vesp != nullptr)
                         MacroQueue::addBuilding({ABILITY_ID::BUILD_ASSIMILATOR, vesp->tag, vesp->pos}, this);
+                }
+            }*/
+            for (int i = 0; i < nexuses.size(); i ++) {
+                if (nexuses[i].vesp1Built && nexuses[i].vesp2Built)
+                    continue;
+                const Unit* nexus = observer->GetUnit(nexuses[i].self);
+                //printf("v1:%d v2:%d\n", nexuses[i].vesp1Built, nexuses[i].vesp2Built);
+                if (nexus->assigned_harvesters >= 14) {
+                    if (!nexuses[i].vesp1Built) {
+                        MacroQueue::addBuilding(
+                            {ABILITY_ID::BUILD_ASSIMILATOR, nexuses[i].vesp1, observer->GetUnit(nexuses[i].vesp1)->pos},
+                            this);
+                        nexuses[i].built1();
+                    } else if (!nexuses[i].vesp2Built) {
+                        MacroQueue::addBuilding(
+                            {ABILITY_ID::BUILD_ASSIMILATOR, nexuses[i].vesp2, observer->GetUnit(nexuses[i].vesp2)->pos},
+                            this);
+                        nexuses[i].built2();
+                    } else {
+                        printf("SOMETHING IS WRONG\n");
+                    }
                 }
             }
         }
@@ -743,6 +781,50 @@ public:
                 //Debug()->DebugTextOut("HARVEST_GATHER");
                 //printf("IDLE");
                 probes[unit->tag].execute(unit, this);
+                break;
+            }
+            case UNIT_TYPEID::PROTOSS_WARPGATE: {
+                if (observer->GetFoodUsed() > observer->GetFoodCap() - 4) {
+                    break;
+                }
+                #define STALKER 3
+                #define SENTRY 1
+                #define ADEPT 2
+                #define ZEALOT 5
+
+                int arr[] = {
+                    STALKER,
+                    SENTRY,
+                    ADEPT,
+                    ZEALOT,
+                };
+
+                AbilityID train[] = {
+                    ABILITY_ID::TRAINWARP_ZEALOT,
+                    ABILITY_ID::TRAINWARP_SENTRY,
+                    ABILITY_ID::TRAINWARP_ADEPT,
+                    ABILITY_ID::TRAINWARP_ZEALOT,
+                };
+
+                int rand = std::rand() % (ZEALOT + STALKER + SENTRY + ADEPT);
+
+                int count = arr[0];
+                int i = 0;
+                for (i = 0; i < 3; i++) {
+                    if (rand < count) {
+                        break;
+                    }
+                    count += arr[i + 1];
+                }
+
+                float x = 2;
+                float y = 2;
+                while (!checkPlacement(pylons[0] + Point3D(x, y, 0), 2)) {
+                    x = (std::rand() % 12000) / 1000.0 - 6;
+                    y = (std::rand() % 12000) / 1000.0 - 6;
+                }
+                MacroQueue::buildUnit(UNIT_TYPEID::PROTOSS_WARPGATE, {train[i], NullTag, pylons[0] + Point3D(x, y, 0)},
+                                      this);
                 break;
             }
             default: {
@@ -789,8 +871,10 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+//have nexus stop checking when it has two vespenes
 //fix probe targetting
 //fix probe build-check
+//better probe queue
 //fix assimilator condition
 //have both 
 //add generator to global variables
