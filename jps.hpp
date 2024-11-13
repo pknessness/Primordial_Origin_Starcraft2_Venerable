@@ -52,11 +52,14 @@ vector<Location> successors(const Grid& grid, const Location& current, const Loc
     return successors;
 }
 
-unordered_map<Location, Location> jps(const Grid& grid, const Location& start, const Location& goal,
+unordered_map<Location, Location> jps(const Grid& grid, const Point2DI& start_, const Point2DI& goal_,
                                       heuristic_fn heuristic, Agent* agent) {
     PQLoc open_set;
     unordered_map<Location, Location> came_from{};
     unordered_map<Location, double> cost_so_far{};
+
+    Location start(start_);
+    Location goal(goal_);
 
     open_set.emplace(0, start);
     came_from[start] = start;

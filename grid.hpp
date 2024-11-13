@@ -11,6 +11,25 @@ struct Location
 {
 	int x, y;
 	Location direction() const;
+
+	Location(int x_, int y_) {
+        x = x_;
+        y = y_;
+    }
+
+	Location() {
+        x = -1;
+        y = -1;
+    }
+
+	Location(Point2DI point) {
+        x = point.x;
+        y = point.y;
+	}
+
+	operator Point2DI() const {
+        return Point2DI(x, y);    
+	}
 };
 
 bool operator==(const Location& a, const Location& b) noexcept;

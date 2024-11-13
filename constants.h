@@ -31,6 +31,10 @@ Point2D P2D(const Point3D &p) {
     return Point2D(p.x, p.y);
 }
 
+Point2DI P2DI(const Point3D &p) {
+    return Point2DI(p.x, p.y);
+}
+
 namespace Aux {
 
 static bool checkPathable(int x, int y, Agent *agent) {
