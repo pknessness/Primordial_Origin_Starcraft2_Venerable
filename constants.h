@@ -11,6 +11,11 @@ typedef struct {
     unsigned int energy = 0;
 } Cost;
 
+struct Building {
+    AbilityID build;
+    Point2D pos;
+};
+
 template <typename... Args>
 std::string strprintf(const std::string &format, Args... args) {
     int size_s = std::snprintf(nullptr, 0, format.c_str(), args...) + 1;  // Extra space for '\0'
@@ -49,6 +54,26 @@ static bool isPylon(const Unit &unit) {
 static bool isNexus(const Unit &unit) {
     UnitTypeID type = unit.unit_type;
     return (type == UNIT_TYPEID::PROTOSS_NEXUS);
+}
+
+static bool isAssimilator(const Unit &unit) {
+    UnitTypeID type = unit.unit_type;
+    return (type == UNIT_TYPEID::PROTOSS_ASSIMILATOR);
+}
+
+static bool isMineral(const Unit &unit) {
+    UnitTypeID type = unit.unit_type;
+    return (type == UNIT_TYPEID::NEUTRAL_MINERALFIELD || type == UNIT_TYPEID::NEUTRAL_LABMINERALFIELD ||
+            type == UNIT_TYPEID::NEUTRAL_MINERALFIELD750 || type == UNIT_TYPEID::NEUTRAL_LABMINERALFIELD750 ||
+            type == UNIT_TYPEID::NEUTRAL_MINERALFIELD450);
+}
+
+static bool isVespene(const Unit &unit) {
+    UnitTypeID type = unit.unit_type;
+    return (type == UNIT_TYPEID::NEUTRAL_VESPENEGEYSER || type == UNIT_TYPEID::NEUTRAL_PROTOSSVESPENEGEYSER ||
+            type == UNIT_TYPEID::NEUTRAL_PURIFIERVESPENEGEYSER || type == UNIT_TYPEID::NEUTRAL_RICHVESPENEGEYSER ||
+            type == UNIT_TYPEID::NEUTRAL_SHAKURASVESPENEGEYSER || type == UNIT_TYPEID::NEUTRAL_SPACEPLATFORMGEYSER);
+    // return (type == UNIT_TYPEID::NEUTRAL_VESPENEGEYSER);
 }
 
 static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {

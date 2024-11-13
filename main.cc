@@ -7,6 +7,8 @@
 #include "grid.hpp"
 #include "tools.hpp"
 #include "constants.h"
+#include "probe.hpp"
+#include "unitmanager.hpp"
 
 using namespace sc2;
 
@@ -19,6 +21,8 @@ public:
     std::vector<double> expansionDistance;
     std::vector<double> rankedExpansionDistance;
     Point2DI staging_location;
+
+    clock_t last_time;
 
     Grid gridmap;
 
@@ -141,7 +145,36 @@ public:
         }
     }
 
+    void listUnitWraps() {
+        string tot = "UNITS:\n";
+        for (auto it = UnitManager::units.begin(); it != UnitManager::units.end(); it++) {
+            auto all = it->second;
+            string type = UnitTypeToName(it->first);
+            tot += ("\n"+ type + ":\n");
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                tot += strprintf("%lx\n",(*it2)->self);
+            }
+        }
+        Debug()->DebugTextOut(tot, Point2D(0.01, 0.01), Color(100, 190, 215), 8);
+    }
+
+    void probeLines() {
+        auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            // printf("Probe %xu Mineral %xu\n", it->first, it->second.minerals);
+            Probe* probe = ((Probe*)*it);
+            if (Observation()->GetUnit(probe->getTargetTag(this)) != nullptr && Observation()->GetUnit(probe->self) != nullptr)
+                Debug()->DebugLineOut(Observation()->GetUnit(probe->getTargetTag(this))->pos + Point3D(0, 0, 1),
+                                      Observation()->GetUnit(probe->self)->pos + Point3D(0, 0, 1), Color(20, 90, 215));
+            else if (Observation()->GetUnit(probe->self) != nullptr) {
+                Debug()->DebugLineOut(Observation()->GetUnit(probe->self)->pos,
+                                      Observation()->GetUnit(probe->self)->pos + Point3D(0, 0, 1), Color(20, 90, 215));
+            }
+        }
+    }
+
     virtual void OnGameStart() final {
+        last_time = clock();
 
         gridmap = Grid{Observation()->GetGameInfo().width, Observation()->GetGameInfo().height};
 
@@ -165,16 +198,37 @@ public:
     }
 
     virtual void OnUnitCreated(const Unit* unit) {
-
+        if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
+            new Probe(unit->tag);
+        } else {
+            new UnitWrapper(unit->tag, unit->unit_type);
+        }
     }
 
     virtual void OnUnitDestroyed(const Unit* unit) {
 
     }
 
+    virtual void OnUnitIdle(const Unit* unit) {
+        
+    }
+
     virtual void OnStep() final {
         grid();
+        listUnitWraps();
+        probeLines();
         Debug()->SendDebug();
+
+        auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            Probe* probe = ((Probe*)*it);
+            probe->execute(this);
+        }
+
+        clock_t new_time = clock();
+        int dt = (new_time - last_time);
+        last_time = new_time;
+        Debug()->DebugTextOut(strprintf("%d", dt), Point2D(0.10, 0.01), Color(100, 190, 215), 8);
     }
 };
 
