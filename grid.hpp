@@ -80,10 +80,35 @@ public:
 	bool forced(const Location& loc, const Location& parent, const Location& travel_dir) const;
 
 	std::vector<Location> neighbours(const Location& current, const std::vector<Location>& dirs, Agent* agent) const;
-        std::vector<Location> pruned_neighbours(const Location& current, const Location& parent, Agent* agent) const;
+    std::vector<Location> pruned_neighbours(const Location& current, const Location& parent, Agent* agent) const;
 };
 
 using namespace std;
+
+std::vector<Point2DI> fullPath(std::vector<Location> path) noexcept {
+    std::vector<Point2DI> pathout;
+    pathout.push_back(path[0]);
+    for (int i = 0; i < path.size() - 1; i++) {
+        for (int j = 0; j < 300; j++) {
+            int x_d = 0;
+            int y_d = 0;
+            if (path[i].x > pathout.back().x) {
+                x_d = 1;
+            } else if (path[i].x < pathout.back().x) {
+                x_d = -1;
+			}
+            if (path[i].y > pathout.back().y) {
+                y_d = 1;
+            } else if (path[i].y < pathout.back().y) {
+                y_d = -1;
+            }
+            pathout.push_back(pathout.back() + Point2DI(x_d, y_d));
+		}
+	}
+    return pathout;
+}
+
+
 
 const static std::vector<Location> ALL_DIRS {
 	/* East, West, North, South */

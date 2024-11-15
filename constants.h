@@ -9,6 +9,7 @@ typedef struct {
     unsigned int minerals = 0;
     unsigned int vespene = 0;
     unsigned int energy = 0;
+    unsigned int psi = 0;
 } Cost;
 
 struct Building {

@@ -173,6 +173,45 @@ public:
         }
     }
 
+    void orderDisplay() {
+        Units units = Observation()->GetUnits(sc2::Unit::Alliance::Self);
+        for (const Unit* unit : units) {
+            if (unit->orders.size() == 0)
+                continue;
+            if (unit->orders[0].target_unit_tag != NullTag && unit->orders[0].target_pos.x != 0 && unit->orders[0].target_pos.y != 0){
+                Debug()->DebugTextOut(
+                    strprintf("%s [%lx] [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                    unit->orders[0].target_unit_tag, unit->orders[0].target_pos.x, unit->orders[0].target_pos.y),
+                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+            }else if (unit->orders[0].target_pos.x != 0 && unit->orders[0].target_pos.y != 0) {
+                Debug()->DebugTextOut(strprintf("%s [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                    unit->orders[0].target_pos.x,
+                    unit->orders[0].target_pos.y),
+                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+            } else if (unit->orders[0].target_unit_tag != NullTag) {
+                Debug()->DebugTextOut(strprintf("%s [%lx]", AbilityTypeToName(unit->orders[0].ability_id),
+                    unit->orders[0].target_unit_tag),
+                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+            } else {
+                Debug()->DebugTextOut(strprintf("%s", AbilityTypeToName(unit->orders[0].ability_id)),
+                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+            }
+        }
+    }
+
+    void buildingDisplay() {
+        auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
+        for (auto it = probes.begin(); it != probes.end(); it++) {
+            Probe* probe = ((Probe*)*it);
+            if (probe->buildings.size() == 0)
+                continue;
+            Debug()->DebugTextOut(strprintf("%s %d,%d", AbilityTypeToName(probe->buildings[0].build),
+                                            probe->buildings[0].pos.x, probe->buildings[0].pos.y),
+                                  Observation()->GetUnit(probe->self)->pos + Point3D{0, 0, 0}, Color(100, 30, 55),
+                                  8);
+        }
+    }
+
     virtual void OnGameStart() final {
         last_time = clock();
 
@@ -199,25 +238,25 @@ public:
 
     virtual void OnUnitCreated(const Unit* unit) {
         if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
-            new Probe(unit->tag);
+            Probe *u = new Probe(unit->tag);
+            u->execute(this);
         } else {
-            new UnitWrapper(unit->tag, unit->unit_type);
+            UnitWrapper* u = new UnitWrapper(unit->tag, unit->unit_type);
+            u->execute(this);
         }
     }
 
     virtual void OnUnitDestroyed(const Unit* unit) {
-
+        UnitWrapper* u = UnitManager::find(unit->unit_type, unit->tag);
+        delete u;
     }
 
     virtual void OnUnitIdle(const Unit* unit) {
-        
+        //UnitManager::find(unit->unit_type, unit->tag)->execute(this);
     }
 
     virtual void OnStep() final {
-        grid();
-        listUnitWraps();
-        probeLines();
-        Debug()->SendDebug();
+        Probe::loadAbilities(this);
 
         auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
         for (auto it = probes.begin(); it != probes.end(); it++) {
@@ -225,10 +264,21 @@ public:
             probe->execute(this);
         }
 
+        if (Observation()->GetGameLoop() == 30) {
+            ((Probe*)probes[0])->addBuilding({ABILITY_ID::BUILD_PYLON, P2D(staging_location)});
+        }
+
         clock_t new_time = clock();
         int dt = (new_time - last_time);
         last_time = new_time;
         Debug()->DebugTextOut(strprintf("%d", dt), Point2D(0.10, 0.01), Color(100, 190, 215), 8);
+
+        grid();
+        listUnitWraps();
+        probeLines();
+        orderDisplay();
+        buildingDisplay();
+        Debug()->SendDebug();
     }
 };
 
@@ -257,6 +307,8 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+//make sure dead probe calls unitwrapper destructor correctly
 
 //have nexus stop checking when it has two vespenes
 //fix probe targetting

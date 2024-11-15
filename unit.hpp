@@ -45,15 +45,11 @@ namespace UnitManager {
 }  // namespace UnitManager
 
 
-UnitWrapper::UnitWrapper(Tag self_) {
-    self = self_;
-    type = UNIT_TYPEID::INVALID;
+UnitWrapper::UnitWrapper(Tag self_) : self(self_), type(UNIT_TYPEID::INVALID){
     printf("WHY ARE YOU USING THE DEFAULT UNITWRAPPER CONSTRUCTOR\n");
 }
 
-UnitWrapper::UnitWrapper(Tag self_, UnitTypeID type) {
-    self = self_;
-    type = type;
+UnitWrapper::UnitWrapper(Tag self_, UnitTypeID type_) : self(self_), type(type_) {
     if (!UnitManager::checkExist(type)) {
             UnitManager::units[type] = vector<UnitWrapper *>();
     }
@@ -66,7 +62,11 @@ bool UnitWrapper::equals(UnitWrapper *wrapper) {
 
 UnitWrapper::~UnitWrapper() {
     for (auto it = UnitManager::units[type].begin(); it != UnitManager::units[type].end(); it++) {
-        UnitManager::units[type].erase(it);
+        //printf("%lx %lx", )
+        if ((*it)->self == self) {
+            UnitManager::units[type].erase(it);
+            break;
+        }
     }
 }
 
