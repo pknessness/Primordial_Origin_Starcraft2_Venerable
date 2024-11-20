@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <unordered_set>
+#include <cmath>
 #include "constants.h"
 
 using namespace sc2;
@@ -108,7 +109,16 @@ std::vector<Point2DI> fullPath(std::vector<Location> path) noexcept {
     return pathout;
 }
 
-
+double fullDist(std::vector<Location> path) noexcept {
+    double dist = 0;
+    for (int i = 0; i < path.size() - 1; i++) {
+        int dx = path[i + 1].x - path[i].x;
+        int dy = path[i + 1].y - path[i].y;
+        dist += sqrt(dx * dx + dy * dy);
+        //printf("[%d,%d %d,%d %.1f]\n", path[i].x, path[i].y, path[i + 1].x, path[i + 1].y, dist);
+    }
+    return dist;
+}
 
 const static std::vector<Location> ALL_DIRS {
 	/* East, West, North, South */
@@ -245,3 +255,5 @@ vector<Location> Grid::pruned_neighbours(const Location& current, const Location
 	}
 	return current_neighbours;
 }
+
+Grid gridmap;

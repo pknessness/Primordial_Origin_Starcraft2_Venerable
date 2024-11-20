@@ -42,6 +42,7 @@ vector<Location> Tool::reconstruct_path(const Location& start, const Location& g
             return {};
         }
     }
+    path.push_back(start);
     reverse(path.begin(), path.end());
     return path;
 }

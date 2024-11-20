@@ -4,17 +4,19 @@
 #include <iostream>
 #include "jps.hpp"
 //#include "jps_old.hpp"
+#include "macro.hpp"
 #include "grid.hpp"
 #include "tools.hpp"
 #include "constants.h"
-#include "probe.hpp"
 #include "unitmanager.hpp"
+#include "dist_transform.hpp"
 
 using namespace sc2;
 
 class Bot : public Agent {
 public:
     //std::vector<Location> path;
+    std::vector<Point2DI> path;
 
     std::vector<Point3D> expansions;
     std::vector<Point3D> rankedExpansions;
@@ -24,8 +26,6 @@ public:
 
     clock_t last_time;
 
-    Grid gridmap;
-
     Point3D P3D(const Point2D& p) {
         return Point3D(p.x, p.y, Observation()->TerrainHeight(p));
     }
@@ -33,15 +33,15 @@ public:
     void initializeStartings() {
         GameInfo game_info = Observation()->GetGameInfo();
         if (Observation()->GetStartLocation().x > game_info.width / 2) {
-            staging_location.x = Observation()->GetStartLocation().x - 3;
+            staging_location.x = Observation()->GetStartLocation().x - 6;
         } else {
-            staging_location.x = Observation()->GetStartLocation().x + 3;
+            staging_location.x = Observation()->GetStartLocation().x + 6;
         }
 
         if (Observation()->GetStartLocation().y > game_info.height / 2) {
-            staging_location.y = Observation()->GetStartLocation().y - 3;
+            staging_location.y = Observation()->GetStartLocation().y - 6;
         } else {
-            staging_location.y = Observation()->GetStartLocation().y + 3;
+            staging_location.y = Observation()->GetStartLocation().y + 6;
         }
     }
 
@@ -56,11 +56,7 @@ public:
             auto came_from = jps(gridmap, staging_location, {int(point.x),int(point.y)}, Tool::euclidean, this);
             auto pathToExpansion = Tool::reconstruct_path(staging_location, {int(point.x), int(point.y)}, came_from);
 
-            double length = 0;
-            for (int i = 0; i < pathToExpansion.size() - 1; i++) {
-                length += Distance2D(P2D(pathToExpansion[i]), P2D(pathToExpansion[i + 1]));
-            }
-
+            double length = fullDist(pathToExpansion);
             expansionDistance.push_back(length);
         }
 
@@ -121,12 +117,12 @@ public:
                 Point2DI point = Point2DI(w, h);
                 int boxHeight = 0.1;
                 Color c(255,255,255);
-                //for (auto loc : path) {
-                //    if (loc.x == w && loc.y == h) {
-                //        c = Color(120, 23, 90);
-                //        break;
-                //    }
-                //}
+                for (auto loc : path) {
+                    if (loc.x == w && loc.y == h) {
+                        c = Color(120, 23, 90);
+                        break;
+                    }
+                }
 
                 if (!(c.r == 255 && c.g == 255 && c.b == 255)) {
                     float height = Observation()->TerrainHeight(P2D(point));
@@ -158,6 +154,20 @@ public:
         Debug()->DebugTextOut(tot, Point2D(0.01, 0.01), Color(100, 190, 215), 8);
     }
 
+    void listMacroActions() {
+        string tot = "MACRO:\n";
+        for (auto it = Macro::actions.begin(); it != Macro::actions.end(); it++) {
+            auto all = it->second;
+            string type = UnitTypeToName(it->first);
+            tot += ("\n" + type + ":\n");
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                tot += AbilityTypeToName(it2->ability);
+                tot += strprintf(" %d LC:%u\n", it2->index, it2->lastChecked);
+            }
+        }
+        Debug()->DebugTextOut(tot, Point2D(0.01, 0.51), Color(250, 50, 15), 8);
+    }
+
     void probeLines() {
         auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
         for (auto it = probes.begin(); it != probes.end(); it++) {
@@ -178,24 +188,35 @@ public:
         for (const Unit* unit : units) {
             if (unit->orders.size() == 0)
                 continue;
+            #define LETTER_DISP -0.07F
             if (unit->orders[0].target_unit_tag != NullTag && unit->orders[0].target_pos.x != 0 && unit->orders[0].target_pos.y != 0){
-                Debug()->DebugTextOut(
-                    strprintf("%s [%lx] [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
-                    unit->orders[0].target_unit_tag, unit->orders[0].target_pos.x, unit->orders[0].target_pos.y),
-                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+                string s = strprintf("%s [%lx] [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                                     unit->orders[0].target_unit_tag, unit->orders[0].target_pos.x,
+                                     unit->orders[0].target_pos.y);
+                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
             }else if (unit->orders[0].target_pos.x != 0 && unit->orders[0].target_pos.y != 0) {
-                Debug()->DebugTextOut(strprintf("%s [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
-                    unit->orders[0].target_pos.x,
-                    unit->orders[0].target_pos.y),
-                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+                string s = strprintf("%s [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                                      unit->orders[0].target_pos.x, unit->orders[0].target_pos.y);
+                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
             } else if (unit->orders[0].target_unit_tag != NullTag) {
-                Debug()->DebugTextOut(strprintf("%s [%lx]", AbilityTypeToName(unit->orders[0].ability_id),
-                    unit->orders[0].target_unit_tag),
-                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+                string s = strprintf("%s [%lx]", AbilityTypeToName(unit->orders[0].ability_id),
+                                     unit->orders[0].target_unit_tag);
+                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
             } else {
-                Debug()->DebugTextOut(strprintf("%s", AbilityTypeToName(unit->orders[0].ability_id)),
-                    unit->pos + Point3D{0,0,0.5}, Color(100, 210, 55), 8);
+                string s = strprintf("%s", AbilityTypeToName(unit->orders[0].ability_id));
+                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
             }
+        }
+    }
+
+    void tagDisplay() {
+        Units units = Observation()->GetUnits(sc2::Unit::Alliance::Self);
+        for (const Unit* unit : units) {
+            if (unit->orders.size() == 0)
+                continue;
+            #define LETTER_DISP -0.07F
+            string s = strprintf("%lx", unit->tag);
+            Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0.3, 0.5}, Color(210, 55, 55), 8);
         }
     }
 
@@ -214,6 +235,7 @@ public:
 
     virtual void OnGameStart() final {
         last_time = clock();
+        Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
 
         gridmap = Grid{Observation()->GetGameInfo().width, Observation()->GetGameInfo().height};
 
@@ -223,17 +245,34 @@ public:
         //unordered_set<Location> walls{{5, 0}, {5, 1}, {2, 2}, {5, 2}, {2, 3}, {5, 3}, {2, 4}, {5, 4},
         //                              {2, 5}, {4, 5}, {5, 5}, {6, 5}, {7, 5}, {2, 6}, {2, 7}};
 
-        //Point2DI start{142, 45};
-        //Point2DI goal{130, 60};
+        Point2DI start{142, 45};
+        Point2DI goal{130, 60};
 
-        //auto came_from = jps(gridmap, start, goal, Tool::euclidean, this);
-        //path = Tool::reconstruct_path(start, goal, came_from);
+        auto came_from = jps(gridmap, start, goal, Tool::euclidean, this);
+        auto pat = Tool::reconstruct_path(start, goal, came_from);
+        path = fullPath(pat);
         /*for (auto loc : path) {
             printf("%d,%d\n", loc.x, loc.y);
         }*/
         //Tool::draw_grid(this, map, {}, {}, path, came_from, start, goal);
         initializeStartings();
         initializeExpansions();
+
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addProbe();
+        Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
+        Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-3,0});
+        //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR, P2D(staging_location) - Point2D{-3, 0});
+        Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
+        Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{3, 0});
     }
 
     virtual void OnUnitCreated(const Unit* unit) {
@@ -244,6 +283,7 @@ public:
             UnitWrapper* u = new UnitWrapper(unit->tag, unit->unit_type);
             u->execute(this);
         }
+        
     }
 
     virtual void OnUnitDestroyed(const Unit* unit) {
@@ -256,6 +296,8 @@ public:
     }
 
     virtual void OnStep() final {
+        Macro::execute(this);
+
         Probe::loadAbilities(this);
 
         auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
@@ -264,9 +306,9 @@ public:
             probe->execute(this);
         }
 
-        if (Observation()->GetGameLoop() == 30) {
-            ((Probe*)probes[0])->addBuilding({ABILITY_ID::BUILD_PYLON, P2D(staging_location)});
-        }
+        //if (Observation()->GetGameLoop() == 30) {
+        //    ((Probe*)probes[0])->addBuilding({ABILITY_ID::BUILD_PYLON, P2D(staging_location)});
+        //}
 
         clock_t new_time = clock();
         int dt = (new_time - last_time);
@@ -275,8 +317,10 @@ public:
 
         grid();
         listUnitWraps();
+        listMacroActions();
         probeLines();
         orderDisplay();
+        tagDisplay();
         buildingDisplay();
         Debug()->SendDebug();
     }

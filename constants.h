@@ -3,18 +3,18 @@
 #include <sc2api/sc2_api.h>
 #include <sc2api/sc2_interfaces.h>
 
+#include "map2d.hpp"
+//#include "jps.hpp"
+//#include "grid.hpp"
+//#include "tools.hpp"
+
 using namespace sc2;
 
-typedef struct {
+struct Cost {
     unsigned int minerals = 0;
     unsigned int vespene = 0;
     unsigned int energy = 0;
-    unsigned int psi = 0;
-} Cost;
-
-struct Building {
-    AbilityID build;
-    Point2D pos;
+    int psi = 0;
 };
 
 template <typename... Args>
@@ -42,6 +42,13 @@ Point2DI P2DI(const Point3D &p) {
 }
 
 namespace Aux {
+
+map2d<int8_t> *buildingBlocked;
+
+constexpr auto MINERALS_PER_PROBE_PER_SEC = 55.0 / 60;
+constexpr auto VESPENE_PER_PROBE_PER_SEC = 61.0 / 60;
+
+constexpr int PYLON_RADIUS = 6;
 
 static bool checkPathable(int x, int y, Agent *agent) {
     return agent->Observation()->IsPathable({float(x), float(y)});
@@ -167,6 +174,44 @@ static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {
     return 0;
 }
 
+static AbilityID unitToBuildAbility(UnitTypeID unit_type) {
+    switch (uint32_t(unit_type)) {
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ASSIMILATOR)):
+            return ABILITY_ID::BUILD_ASSIMILATOR;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE)):
+            return ABILITY_ID::BUILD_CYBERNETICSCORE;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DARKSHRINE)):
+            return ABILITY_ID::BUILD_DARKSHRINE;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FLEETBEACON)):
+            return ABILITY_ID::BUILD_FLEETBEACON;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FORGE)):
+            return ABILITY_ID::BUILD_FORGE;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_GATEWAY)):
+            return ABILITY_ID::BUILD_GATEWAY;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_NEXUS)):
+            return ABILITY_ID::BUILD_NEXUS;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOTONCANNON)):
+            return ABILITY_ID::BUILD_PHOTONCANNON;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PYLON)):
+            return ABILITY_ID::BUILD_PYLON;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSBAY)):
+            return ABILITY_ID::BUILD_ROBOTICSBAY;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY)):
+            return ABILITY_ID::BUILD_ROBOTICSFACILITY;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_SHIELDBATTERY)):
+            return ABILITY_ID::BUILD_SHIELDBATTERY;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_STARGATE)):
+            return ABILITY_ID::BUILD_STARGATE;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE)):
+            return ABILITY_ID::BUILD_TEMPLARARCHIVE;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL)):
+            return ABILITY_ID::BUILD_TWILIGHTCOUNCIL;
+        default:
+            return 0;
+    }
+    return 0;
+}
+
 static UpgradeID researchAbilityToUpgrade(AbilityID build_ability) {
     switch (uint32_t(build_ability)) {
         case (uint32_t(ABILITY_ID::RESEARCH_ADEPTRESONATINGGLAIVES)):
@@ -240,17 +285,24 @@ static UpgradeID researchAbilityToUpgrade(AbilityID build_ability) {
 }
 
 static Cost buildAbilityToCost(AbilityID build_ability, Agent *agent) {
-    if (build_ability == ABILITY_ID::MOVE_MOVE)
-        return {0, 0, 0};
     sc2::UnitTypeData unit_stats =
         agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(buildAbilityToUnit(build_ability)));
-    return {unit_stats.mineral_cost, unit_stats.vespene_cost, 0};
+    return {unit_stats.mineral_cost, unit_stats.vespene_cost, 0, int(unit_stats.food_required)};
 }
 
 static Cost UpgradeToCost(AbilityID research_ability, Agent *agent) {
     UpgradeData upgrade_stats =
         agent->Observation()->GetUpgradeData().at(static_cast<uint32_t>(researchAbilityToUpgrade(research_ability)));
     return {upgrade_stats.mineral_cost, upgrade_stats.vespene_cost, 0};
+}
+
+static Cost abilityToCost(AbilityID ability, Agent *agent) {
+    if (buildAbilityToUnit(ability) != 0) {
+        return buildAbilityToCost(ability, agent);
+    } else if (researchAbilityToUpgrade(ability)) {
+        return UpgradeToCost(ability, agent);
+    }
+    return {0, 0, 0, 0};
 }
 
 static int structureDiameter(UnitTypeID type) {
@@ -271,11 +323,13 @@ static int structureDiameter(UnitTypeID type) {
             return 3;
         case (uint32_t(UNIT_TYPEID::PROTOSS_FORGE)):
             return 3;
-        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOTONCANNON)):
-            return 3;
         case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSBAY)):
             return 3;
         case (uint32_t(UNIT_TYPEID::PROTOSS_SHIELDBATTERY)):
+            return 2;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DARKSHRINE)):
+            return 2;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOTONCANNON)):
             return 2;
         case (uint32_t(UNIT_TYPEID::PROTOSS_STARGATE)):
             return 3;
@@ -284,7 +338,7 @@ static int structureDiameter(UnitTypeID type) {
         case (uint32_t(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL)):
             return 3;
         default:
-            break;
+            return 0;
     }
 
     /*PROTOSS_ASSIMILATOR = 61,
@@ -298,13 +352,109 @@ static int structureDiameter(UnitTypeID type) {
     PROTOSS_WARPGATE = 133,*/
 }
 
+static bool requiresPylon(AbilityID build_ability) {
+    switch (uint32_t(build_ability)) {
+        case (uint32_t(ABILITY_ID::BUILD_ASSIMILATOR)):  //FALSE
+            return false;
+        case (uint32_t(ABILITY_ID::BUILD_CYBERNETICSCORE)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_DARKSHRINE)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_FLEETBEACON)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_FORGE)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_GATEWAY)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_NEXUS)):  // FALSE
+            return false;
+        case (uint32_t(ABILITY_ID::BUILD_PHOTONCANNON)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_PYLON)):  // FALSE
+            return false;
+        case (uint32_t(ABILITY_ID::BUILD_ROBOTICSBAY)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_ROBOTICSFACILITY)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_SHIELDBATTERY)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_STARGATE)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_TEMPLARARCHIVE)):
+            return true;
+        case (uint32_t(ABILITY_ID::BUILD_TWILIGHTCOUNCIL)):
+            return true;
+        case (uint32_t(ABILITY_ID::TRAINWARP_ADEPT)):
+            return true;
+        case (uint32_t(ABILITY_ID::TRAINWARP_DARKTEMPLAR)):
+            return true;
+        case (uint32_t(ABILITY_ID::TRAINWARP_HIGHTEMPLAR)):
+            return true;
+        case (uint32_t(ABILITY_ID::TRAINWARP_SENTRY)):
+            return true;
+        case (uint32_t(ABILITY_ID::TRAINWARP_STALKER)):
+            return true;
+        case (uint32_t(ABILITY_ID::TRAINWARP_ZEALOT)):
+            return true;
+        default:
+            return false;
+    }
+    return 0;
+}
+
 static int theorySupply(Agent *agent) {
     Units nexi = agent->Observation()->GetUnits(Unit::Alliance::Self, Aux::isNexus);
     Units pylons = agent->Observation()->GetUnits(Unit::Alliance::Self, Aux::isPylon);
     return (nexi.size() * 15) + (pylons.size() * 8);
 }
 
+bool generatePlacement(Point2D p, int size) {
+    int x = p.x - (size / 2);
+    int y = p.y - (size / 2);
+    for (int i = x; i < x + size; i++) {
+        for (int j = y; j < y + size; j++) {
+            // printf("{%d,%d}", i, j);
+            imRef(buildingBlocked, i, j) = 1;
+        }
+    }
+    return true;
+}
+
+bool ungeneratePlacement(Point2D p, int size) {
+    int x = p.x - (size / 2);
+    int y = p.y - (size / 2);
+    for (int i = x; i < x + size; i++) {
+        for (int j = y; j < y + size; j++) {
+            imRef(buildingBlocked, i, j) = 0;
+        }
+    }
+    return true;
+}
+
+bool checkPlacement(Point2D p, int size) {
+    int x = p.x - (size / 2);
+    int y = p.y - (size / 2);
+    for (int i = x; i < x + size; i++) {
+        for (int j = y; j < y + size; j++) {
+            Point2D check(i, j);
+            if (imRef(buildingBlocked, int(check.x), int(check.y))) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 }  // namespace Aux
+
+struct Building {
+    AbilityID build;
+    Point2D pos;
+
+    Cost cost(Agent *agent) {
+        return Aux::buildAbilityToCost(build, agent);
+    }
+};
 
 constexpr float timeSpeed = 1.4;
 constexpr float fps = 16 * timeSpeed;

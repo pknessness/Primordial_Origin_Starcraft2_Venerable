@@ -7,9 +7,11 @@
 map<Tag, int8_t> probeTargetting;
 
 class Probe : public UnitWrapper {
+private:
+    Tag target;
+
 public:
     vector<Building> buildings;
-    Tag target;
     AvailableAbilities abilities;
 
     Probe(Tag self_) : UnitWrapper(self_, UNIT_TYPEID::PROTOSS_PROBE) {
@@ -50,6 +52,10 @@ public:
                                             Distance2D(agent->Observation()->GetUnit(self)->pos, targ->pos)) {
                     nearest = targ;
                 }
+            }
+            
+            if (nearest == nullptr) {
+                return NullTag;
             }
             target = nearest->tag;
             probeTargetting[target] += 1;
