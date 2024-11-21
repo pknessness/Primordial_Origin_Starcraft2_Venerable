@@ -46,7 +46,7 @@ struct MacroAction {
 namespace Macro {
     map<UnitTypeID, vector<MacroAction>> actions;
 
-    void addAction(UnitTypeID unit_type_, AbilityID ability_, Point2D pos_) {
+    void addAction(UnitTypeID unit_type_, AbilityID ability_, Point2D pos_ = Point2D{0,0}) {
         if (actions.find(unit_type_) == actions.end()) {
             actions[unit_type_] = vector<MacroAction>();
         }
@@ -97,13 +97,57 @@ namespace Macro {
                 [topAct](const Unit &unit) -> bool { 
                 //return (unit.unit_type == topAct.unit_type) &&
                 //       ((unit.unit_type == UNIT_TYPEID::PROTOSS_PROBE) || unit.orders.size() == 0);
-                return (unit.unit_type == topAct.unit_type) && 
+                return (unit.unit_type == topAct.unit_type) && unit.build_progress == 1.0 && 
                        ((unit.unit_type == UNIT_TYPEID::PROTOSS_PROBE &&
                          (unit.orders.size() == 0 || unit.orders.front().ability_id == ABILITY_ID::HARVEST_RETURN)) ||
                         unit.orders.size() == 0);
             });
             if (units.size() == 0)
                 continue;
+
+            UnitTypeData unit_stats =
+                agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(topAct.unit_type));
+
+            int foodCap = agent->Observation()->GetFoodCap();
+            int foodUsed = agent->Observation()->GetFoodUsed();
+
+            auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+
+            if (unit_stats.food_required > foodCap - foodUsed ) {
+                bool cont = false;
+                if (actions[UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
+                    actions[UNIT_TYPEID::PROTOSS_PROBE].front().index = 0;
+                    continue;
+                }
+                for (int i = 0; i < pylons.size(); i++) {
+                    if (agent->Observation()->GetUnit(pylons[i]->self)->build_progress != 1.0) {
+                        cont = true;
+                        break;
+                    }
+                }
+                if (cont)
+                    continue;
+
+                addBuildingTop(ABILITY_ID::BUILD_PYLON, Point2D{-1, -1}, 0);
+            }
+
+            if (topAct.pos == Point2D{-1, -1}) {
+                if (topAct.ability == ABILITY_ID::BUILD_PYLON) {
+                    Point2D p = getPylonLocation(agent);
+                    if (p == Point2D{-1, -1}) {
+                        continue;
+                    }
+                    topAct.pos = p;
+                    actions[topAct.unit_type].front().pos = p;
+                } else {
+                    Point2D p = getBuildingLocation(agent);
+                    if (p == Point2D{-1, -1}) {
+                        continue;
+                    }
+                    topAct.pos = p;
+                    actions[topAct.unit_type].front().pos = p;
+                }
+            }
 
             Cost c = Aux::abilityToCost(topAct.ability, agent);
             int theoreticalMinerals = agent->Observation()->GetMinerals();
@@ -125,30 +169,37 @@ namespace Macro {
 
             const Unit *actionUnit;
 
-            UnitTypeData unit_stats =
-                agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(topAct.unit_type));
+            UnitTypeID prerequisite = UNIT_TYPEID::INVALID;
 
-            UnitTypeID prerequisite = unit_stats.tech_requirement;
+            if (Aux::buildAbilityToUnit(topAct.ability) != UNIT_TYPEID::INVALID) {
+                UnitTypeData ability_stats = agent->Observation()->GetUnitTypeData().at(
+                    static_cast<uint32_t>(Aux::buildAbilityToUnit(topAct.ability)));
+
+                prerequisite = ability_stats.tech_requirement;
+            }
+            
+
+            //UnitTypeID prerequisite = unit_stats.tech_requirement;
 
             if (topAct.unit_type == UNIT_TYPEID::PROTOSS_PROBE && topAct.ability != ABILITY_ID::MOVE_MOVE &&
                 topAct.ability != ABILITY_ID::MOVE_MOVEPATROL) {
 
                 if (prerequisite != UNIT_TYPEID::INVALID && UnitManager::get(prerequisite).size() == 0) {
-                    //addBuildingTop(Aux::unitToBuildAbility(prerequisite), )
+                    addBuildingTop(Aux::unitToBuildAbility(prerequisite), Point2D{-1, -1}, topAct.index);
                     continue;
                 }
 
                 Units viablePylons = Units();
 
                 if (Aux::requiresPylon(topAct.ability)) {
-                    auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+                    //auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
                     bool foundPylon = false;
                     for (int i = 0; i < pylons.size(); i++) {
                         const Unit *pylon = agent->Observation()->GetUnit(pylons[i]->self);
                         if (Distance2D(pylon->pos, topAct.pos) < Aux::PYLON_RADIUS) {
                             viablePylons.push_back(pylon);
                             foundPylon = true;
-                            if (pylon->is_building == false) {
+                            if (pylon->build_progress == 1.0) {
                                 break;
                             }
                         }
@@ -164,9 +215,15 @@ namespace Macro {
                     Point2DI start = uni->pos;
                     Point2DI goal = topAct.pos;
 
-                    auto came_from = jps(gridmap, start, goal, Tool::euclidean, agent);
-                    vector<Location> pat = Tool::reconstruct_path(start, goal, came_from);
-                    float dist = fullDist(pat);
+                    float dist = 0;
+                    if (topAct.ability == ABILITY_ID::BUILD_ASSIMILATOR) {
+                        dist = Distance2D(P2D(start), P2D(goal));
+                    } else {
+                        auto came_from = jps(gridmap, start, goal, Tool::euclidean, agent);
+                        vector<Location> pat = Tool::reconstruct_path(start, goal, came_from);
+                        dist = fullDist(pat);
+                    }
+                    
                     //printf("%.2f %.2f\n", agent->Query()->PathingDistance(uni, topAct.pos), dist);
 
                     if (mindist == -1 || dist < mindist) {
@@ -179,6 +236,8 @@ namespace Macro {
                 // timeSpeed);
                 float dt = mindist / (unit_stats.movement_speed * timeSpeed);
 
+                if (mindist == -1)
+                    dt = 0;
                 
                 if (Aux::requiresPylon(topAct.ability) && viablePylons.back()->build_progress != 1.0) {
                     UnitTypeData pylon_stats =
@@ -231,13 +290,31 @@ namespace Macro {
                 theoreticalVespene += (dt * Aux::VESPENE_PER_PROBE_PER_SEC * numVespeneMiners);
             } else {
                 actionUnit = units[0];
+
+                if (prerequisite != UNIT_TYPEID::INVALID) {
+                    UnitTypeData prereq_stats =
+                        agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(prerequisite));
+
+                    auto prereqs = UnitManager::get(prerequisite);
+                    bool found = false;
+                    for (int i = 0; i < prereqs.size(); i++) {
+                        const Unit *prereq = agent->Observation()->GetUnit(prereqs[i]->self);
+                        if (prereq->build_progress == 1.0) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found == false) {
+                        continue;
+                    }
+                }
             }
 
             printf("M:%d V:%d | %s %llx %s M:%d/%d V:%d/%d S:%d/%d\n", agent->Observation()->GetMinerals(),
                    agent->Observation()->GetVespene(),
                    UnitTypeToName(topAct.unit_type), actionUnit->tag,
                    AbilityTypeToName(topAct.ability), theoreticalMinerals,
-                   c.minerals, theoreticalVespene, c.vespene, agent->Observation()->GetFoodUsed(), c.psi);
+                   int(c.minerals), theoreticalVespene, int(c.vespene), agent->Observation()->GetFoodUsed(), c.psi);
             if (theoreticalMinerals >= int(c.minerals) && theoreticalVespene >= int(c.vespene)) {
                 if (topAct.pos != Point2D{0, 0}) {
                     if (topAct.unit_type == UNIT_TYPEID::PROTOSS_PROBE) {

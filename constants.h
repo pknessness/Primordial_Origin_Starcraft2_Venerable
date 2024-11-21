@@ -45,6 +45,12 @@ namespace Aux {
 
 map2d<int8_t> *buildingBlocked;
 
+std::vector<Point2D> pylonLocations = std::vector<Point2D>();
+int pylonPointer = 0;
+
+std::vector<Point2D> buildingLocations = std::vector<Point2D>();
+int buildingPointer = 0;
+
 constexpr auto MINERALS_PER_PROBE_PER_SEC = 55.0 / 60;
 constexpr auto VESPENE_PER_PROBE_PER_SEC = 61.0 / 60;
 
@@ -408,7 +414,7 @@ static int theorySupply(Agent *agent) {
     return (nexi.size() * 15) + (pylons.size() * 8);
 }
 
-bool generatePlacement(Point2D p, int size) {
+bool addPlacement(Point2D p, int size) {
     int x = p.x - (size / 2);
     int y = p.y - (size / 2);
     for (int i = x; i < x + size; i++) {
@@ -420,7 +426,11 @@ bool generatePlacement(Point2D p, int size) {
     return true;
 }
 
-bool ungeneratePlacement(Point2D p, int size) {
+bool addPlacement(Point2D p, UnitTypeID unit_type) {
+    return addPlacement(p, structureDiameter(unit_type));
+}
+
+bool removePlacement(Point2D p, int size) {
     int x = p.x - (size / 2);
     int y = p.y - (size / 2);
     for (int i = x; i < x + size; i++) {
@@ -431,13 +441,32 @@ bool ungeneratePlacement(Point2D p, int size) {
     return true;
 }
 
+bool removePlacement(Point2D p, UnitTypeID unit_type) {
+    return removePlacement(p, structureDiameter(unit_type));
+}
+
 bool checkPlacement(Point2D p, int size) {
     int x = p.x - (size / 2);
     int y = p.y - (size / 2);
     for (int i = x; i < x + size; i++) {
         for (int j = y; j < y + size; j++) {
-            Point2D check(i, j);
-            if (imRef(buildingBlocked, int(check.x), int(check.y))) {
+            //Point2D check(i, j);
+            if (imRef(buildingBlocked, i, j) > 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool checkPlacementFull(Point2D p, int size, Agent *agent) {
+    int x = p.x - (size / 2);
+    int y = p.y - (size / 2);
+    for (int i = x; i < x + size; i++) {
+        for (int j = y; j < y + size; j++) {
+            // Point2D check(i, j);
+            if (imRef(buildingBlocked, i, j) > 0 ||
+                !agent->Observation()->IsPlacable(Point2D{(float)i + 0.5F, (float)j + 0.5F})) {
                 return false;
             }
         }

@@ -115,17 +115,25 @@ public:
         for (int w = wS; w < wE; w++) {
             for (int h = hS; h < hE; h++) {
                 Point2DI point = Point2DI(w, h);
-                int boxHeight = 0.1;
+                float boxHeight = 0;
                 Color c(255,255,255);
-                for (auto loc : path) {
-                    if (loc.x == w && loc.y == h) {
-                        c = Color(120, 23, 90);
-                        break;
-                    }
+
+                //for (auto loc : path) {
+                //    if (loc.x == w && loc.y == h) {
+                //        c = Color(120, 23, 90);
+                //        break;
+                //    }
+                //}
+
+                if (imRef(Aux::buildingBlocked, w, h) != 0) {
+                    boxHeight = 1;
+                    c = {123,50,10};
                 }
 
-                if (!(c.r == 255 && c.g == 255 && c.b == 255)) {
+                if (0 || !(c.r == 255 && c.g == 255 && c.b == 255) || boxHeight != 0) {
                     float height = Observation()->TerrainHeight(P2D(point));
+
+                    
 
                     Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
                                          Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
@@ -154,6 +162,32 @@ public:
         Debug()->DebugTextOut(tot, Point2D(0.01, 0.01), Color(100, 190, 215), 8);
     }
 
+    void listUnitWrapsNeutral() {
+        string tot = "UNITS:\n";
+        for (auto it = UnitManager::neutrals.begin(); it != UnitManager::neutrals.end(); it++) {
+            auto all = it->second;
+            string type = UnitTypeToName(it->first);
+            tot += ("\n" + type + ":\n");
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                tot += strprintf("%lx\n", (*it2)->self);
+            }
+        }
+        Debug()->DebugTextOut(tot, Point2D(0.11, 0.01), Color(100, 190, 215), 8);
+    }
+
+    void listUnitWrapsEnemies() {
+        string tot = "UNITS:\n";
+        for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
+            auto all = it->second;
+            string type = UnitTypeToName(it->first);
+            tot += ("\n" + type + ":\n");
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                tot += strprintf("%lx\n", (*it2)->self);
+            }
+        }
+        Debug()->DebugTextOut(tot, Point2D(0.21, 0.01), Color(100, 190, 215), 8);
+    }
+
     void listMacroActions() {
         string tot = "MACRO:\n";
         for (auto it = Macro::actions.begin(); it != Macro::actions.end(); it++) {
@@ -161,11 +195,10 @@ public:
             string type = UnitTypeToName(it->first);
             tot += ("\n" + type + ":\n");
             for (auto it2 = all.begin(); it2 != all.end(); it2++) {
-                tot += AbilityTypeToName(it2->ability);
-                tot += strprintf(" %d LC:%u\n", it2->index, it2->lastChecked);
+                tot += strprintf("%s %d %.1f,%.1f\n", AbilityTypeToName(it2->ability), it2->index, it2->pos.x, it2->pos.y);
             }
         }
-        Debug()->DebugTextOut(tot, Point2D(0.01, 0.51), Color(250, 50, 15), 8);
+        Debug()->DebugTextOut(tot, Point2D(0.01, 0.01), Color(250, 50, 15), 8);
     }
 
     void probeLines() {
@@ -233,6 +266,18 @@ public:
         }
     }
 
+    void pylonBuildingLoc() {
+        for (int i = 0; i < Aux::pylonLocations.size(); i++) {
+            Point3D p = P3D(Aux::pylonLocations[i]);
+            Debug()->DebugBoxOut(p + Point3D{-1, -1, 0}, p + Point3D{1, 1, 2});
+        }
+        for (int i = 0; i < Aux::buildingLocations.size(); i++) {
+            Point3D p = P3D(Aux::buildingLocations[i]);
+            Debug()->DebugBoxOut(p + Point3D{-1.5, -1.5, 0}, p + Point3D{1.5, 1.5, 3});
+        }
+    }
+
+    //! Called when a game is started or restarted.
     virtual void OnGameStart() final {
         last_time = clock();
         Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
@@ -258,43 +303,69 @@ public:
         initializeStartings();
         initializeExpansions();
 
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addProbe();
-        Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
-        Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-3,0});
-        //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR, P2D(staging_location) - Point2D{-3, 0});
-        Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
-        Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{3, 0});
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addProbe();
+        //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
+        //Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-3,0});
+        ////Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR, P2D(staging_location) - Point2D{-3, 0});
+        //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR, Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
+        //Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
+        //Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{3, 0});
+        //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+        //                   Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
     }
 
+    //! Called when a game has ended.
+    virtual void OnGameEnd() {
+
+    }
+
+    //! Called when a Unit has been created by the player.
+    //!< \param unit The created unit.
     virtual void OnUnitCreated(const Unit* unit) {
+        if (unit->tag == NullTag) {
+            return;
+        }
         if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
             Probe *u = new Probe(unit->tag);
             u->execute(this);
         } else {
-            UnitWrapper* u = new UnitWrapper(unit->tag, unit->unit_type);
+            //UnitWrapper* u = new UnitWrapper(unit->tag, unit->unit_type);
+            //u->execute(this);
+            UnitWrapper* u = new UnitWrapper(unit);
             u->execute(this);
         }
-        
+        Aux::addPlacement(unit->pos, unit->unit_type);
     }
 
+    //! Called whenever one of the player's units has been destroyed.
+    //!< \param unit The destroyed unit.
     virtual void OnUnitDestroyed(const Unit* unit) {
         UnitWrapper* u = UnitManager::find(unit->unit_type, unit->tag);
         delete u;
+        Aux::removePlacement(unit->pos, unit->unit_type);
     }
 
+    //! Called when a unit becomes idle, this will only occur as an event so will only be called when the unit becomes
+    //! idle and not a second time. Being idle is defined by having orders in the previous step and not currently having
+    //! orders or if it did not exist in the previous step and now does, a unit being created, for instance, will call
+    //! both OnUnitCreated and OnUnitIdle if it does not have a rally set.
+    //!< \param unit The idle unit.
     virtual void OnUnitIdle(const Unit* unit) {
         //UnitManager::find(unit->unit_type, unit->tag)->execute(this);
     }
 
+    //! In non realtime games this function gets called after each step as indicated by step size.
+    //! In realtime this function gets called as often as possible after request/responses are received from the game
+    //! gathering observation state.
     virtual void OnStep() final {
         Macro::execute(this);
 
@@ -306,9 +377,94 @@ public:
             probe->execute(this);
         }
 
-        //if (Observation()->GetGameLoop() == 30) {
-        //    ((Probe*)probes[0])->addBuilding({ABILITY_ID::BUILD_PYLON, P2D(staging_location)});
-        //}
+        if (Observation()->GetGameLoop() == 30) {
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+            Macro::addProbe();
+
+            //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
+            //Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-2.5, 0.5});
+            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+            //                   Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
+            //Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
+            //Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{2.5, -0.5});
+            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+            //                   Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
+            //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location) - Point2D{0.5, -2.5});
+            //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            //Macro::addBuilding(ABILITY_ID::BUILD_STARGATE, P2D(staging_location) - Point2D{-0.5, 3});
+
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1,-1});
+            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                               Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
+            Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
+            Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                               Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSFACILITY, {-1, -1});
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_OBSERVER);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_TWILIGHTCOUNCIL, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+            Macro::addBuilding(ABILITY_ID::BUILD_TEMPLARARCHIVE, {-1, -1});
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_WARPPRISM);
+        }
 
         clock_t new_time = clock();
         int dt = (new_time - last_time);
@@ -316,13 +472,58 @@ public:
         Debug()->DebugTextOut(strprintf("%d", dt), Point2D(0.10, 0.01), Color(100, 190, 215), 8);
 
         grid();
-        listUnitWraps();
+        pylonBuildingLoc();
+        //listUnitWraps();
+        //listUnitWrapsNeutral();
+        //listUnitWrapsEnemies();
         listMacroActions();
         probeLines();
         orderDisplay();
         tagDisplay();
         buildingDisplay();
         Debug()->SendDebug();
+    }
+
+    //!  Called when a neutral unit is created. For example, mineral fields observed for the first time
+    //!< \param unit The observed unit.
+    virtual void OnNeutralUnitCreated(const Unit* unit) {
+        UnitWrapper* u = new UnitWrapper(unit);
+        u->execute(this);
+    }
+
+    //! Called when an upgrade is finished, warp gate, ground weapons, baneling speed, etc.
+    //!< \param upgrade The completed upgrade.
+    virtual void OnUpgradeCompleted(UpgradeID upgradeID) {
+    }
+
+    //! Called when the unit in the previous step had a build progress less than 1.0 but is greater than or equal to 1.0
+    //! in
+    // !the current step.
+    //!< \param unit The constructed unit.
+    virtual void OnBuildingConstructionComplete(const Unit* unit) {
+    }
+
+    //! Called when the unit in the current observation has lower health or shields than in the previous observation.
+    //!< \param unit The damaged unit.
+    //!< \param health The change in health (damage is positive)
+    //!< \param shields The change in shields (damage is positive)
+    virtual void OnUnitDamaged(const Unit* unit, float health, float shields) {
+    }
+
+    //! Called when a nydus is placed.
+    virtual void OnNydusDetected() {
+    }
+
+    //! Called when a nuclear launch is detected.
+    virtual void OnNuclearLaunchDetected() {
+    }
+
+    //! Called when an enemy unit enters vision from out of fog of war.
+    //!< \param unit The unit entering vision.
+    virtual void OnUnitEnterVision(const Unit* unit) {
+        UnitWrapper* u = new UnitWrapper(unit);
+        u->execute(this);
+        Aux::addPlacement(unit->pos, unit->unit_type);
     }
 };
 
@@ -342,8 +543,7 @@ int main(int argc, char* argv[]) {
                            "5_13/GoldenAura513AIE.SC2Map", "5_13/Gresvan513AIE.SC2Map",
                            "5_13/HardLead513AIE.SC2Map",   "5_13/SiteDelta513AIE.SC2Map"};
     int r = 5;  //(std::rand() % 12000)/2000;
-    printf("rand %d [%d %d %d %d %d %d]\n", r, std::rand(), std::rand(), std::rand(), std::rand(), std::rand(),
-           std::rand());
+    printf("rand %d [%d %d %d %d %d %d] %d\n", r, std::rand(), std::rand(), std::rand(), std::rand(), std::rand(), std::rand(), RAND_MAX);
 
     coordinator.StartGame(maps[r]);
     while (coordinator.Update()) {

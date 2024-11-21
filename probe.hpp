@@ -6,6 +6,62 @@
 
 map<Tag, int8_t> probeTargetting;
 
+Point2D getBuildingLocation(Agent *agent) {
+    if (Aux::buildingPointer >= Aux::buildingLocations.size()) {
+        GameInfo game_info = agent->Observation()->GetGameInfo();
+
+        for (int i = 0; i < 500; i++) {
+            float theta = ((float)std::rand()) * 2 * 3.1415926 / RAND_MAX;
+            float radius = ((float)std::rand()) * Aux::PYLON_RADIUS / RAND_MAX;
+
+            // float x = ((float)std::rand()) * game_info.width / RAND_MAX;
+            // float y = ((float)std::rand()) * game_info.height / RAND_MAX;
+
+            auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+
+            float x = std::cos(theta) * radius;
+            float y = std::sin(theta) * radius;
+
+            Point2D p = pylons[std::rand() % pylons.size()]->pos(agent) + Point2D{x, y};
+
+            //printf("%.1f,%.1f\n", x, y);
+
+            if ((i > 100 || agent->Observation()->GetVisibility(p) == Visibility::Visible) &&
+                Aux::checkPlacementFull(p, 3, agent)) {
+                Aux::buildingLocations.push_back(p);
+                break;
+            } else if (i == 499) {
+                return {-1, -1};
+            }
+        }
+    }
+    Aux::addPlacement(Aux::buildingLocations[Aux::buildingPointer], 3);
+    return Aux::buildingLocations[Aux::buildingPointer++];
+}
+
+Point2D getPylonLocation(Agent *agent) {
+    if (Aux::pylonPointer >= Aux::pylonLocations.size()) {
+        GameInfo game_info = agent->Observation()->GetGameInfo();
+
+        for (int i = 0; i < 500; i++) {
+            float x = ((float)std::rand()) * game_info.width / RAND_MAX;
+            float y = ((float)std::rand()) * game_info.height / RAND_MAX;
+
+            Point2D p{x, y};
+
+            if ((i > 100 || agent->Observation()->GetVisibility(p) == Visibility::Visible) &&
+                Aux::checkPlacementFull(p, 2, agent)) {
+                Aux::pylonLocations.push_back(p);
+                break;
+            } else if (i == 499) {
+                return p;
+            }
+        }
+    }
+    Aux::addPlacement(Aux::pylonLocations[Aux::pylonPointer], 2);
+    return Aux::pylonLocations[Aux::pylonPointer++];
+}
+
 class Probe : public UnitWrapper {
 private:
     Tag target;
@@ -64,6 +120,9 @@ public:
     }
 
     bool execute(Agent *agent) {
+        if (agent->Observation()->GetUnit(self) == nullptr) {
+            return false;
+        }
         if (buildings.size() == 0) {
             if (agent->Observation()->GetUnit(self)->orders.size() == 0 ||
                 (agent->Observation()->GetUnit(self)->orders[0].ability_id == ABILITY_ID::HARVEST_GATHER &&
@@ -77,11 +136,40 @@ public:
             
         } else {
             Building top = buildings[0];
-            if (Distance2D(agent->Observation()->GetUnit(self)->pos, top.pos) < 1) {
+            if (Distance2D(agent->Observation()->GetUnit(self)->pos, top.pos) < 1.75) {
+                if (Aux::requiresPylon(top.build)) {
+                    auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+                    bool foundPylon = false;
+                    for (int i = 0; i < pylons.size(); i++) {
+                        const Unit *pylon = agent->Observation()->GetUnit(pylons[i]->self);
+                        if (Distance2D(pylon->pos, top.pos) < Aux::PYLON_RADIUS) {
+                            if (pylon->build_progress == 1.0) {
+                                foundPylon = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!foundPylon) {
+                        return false;
+                    }
+                }
                 Cost c = Aux::buildAbilityToCost(top.build, agent);
                 if (c.minerals > agent->Observation()->GetMinerals() || c.vespene > agent->Observation()->GetVespene())
                     return false;
                 if (top.build == ABILITY_ID::BUILD_ASSIMILATOR) {
+                    auto vespene = UnitManager::getVespene();
+                    for (int i = 0; i < vespene.size(); i++) {
+                        //if (agent->Observation()->GetUnit(vespene[i]->self) == nullptr) {
+                        //    continue;
+                        //}
+                        printf("TRY: %.1f,%.1f %.1f,%.1f\n", vespene[i]->pos(agent).x, vespene[i]->pos(agent).y,
+                               pos(agent).x, pos(agent).y);
+                        if (Distance2D(vespene[i]->pos(agent), pos(agent)) < 2) {
+                            printf("%Ix %s %Ix\n", self, AbilityTypeToName(top.build), vespene[i]->self);
+                            agent->Actions()->UnitCommand(self, top.build, vespene[i]->self);
+                            break;
+                        }
+                    }
                     //agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_RETURN);
                 } else {
                     agent->Actions()->UnitCommand(self, top.build, top.pos);
@@ -97,8 +185,14 @@ public:
     static void loadAbilities(Agent *agent) {
         Units u;
         vector<UnitWrapper *> probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
-        for (UnitWrapper *probe : probes) {
-            u.push_back(agent->Observation()->GetUnit(probe->self));
+        for (int i = 0; i < probes.size(); i++) {
+            const Unit *unit = agent->Observation()->GetUnit(probes[i]->self);
+            if (unit != nullptr) {
+                u.push_back(unit);
+            } else {
+                probes.erase(probes.begin() + i);
+                i --;
+            }
         }
         vector<AvailableAbilities> allAb = agent->Query()->GetAbilitiesForUnits(u);
         for (int i = 0; i < allAb.size(); i++) {

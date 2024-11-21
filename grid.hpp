@@ -31,6 +31,10 @@ struct Location
 	operator Point2DI() const {
         return Point2DI(x, y);    
 	}
+
+	operator Point2D() const {
+		return Point2D(x, y);
+    }
 };
 
 bool operator==(const Location& a, const Location& b) noexcept;
@@ -109,8 +113,11 @@ std::vector<Point2DI> fullPath(std::vector<Location> path) noexcept {
     return pathout;
 }
 
-double fullDist(std::vector<Location> path) noexcept {
-    double dist = 0;
+float fullDist(std::vector<Location> path) noexcept {
+    float dist = 0;
+    if (path.size() == 0)
+        return -1;
+    //printf("PS:%d\n", path.size());
     for (int i = 0; i < path.size() - 1; i++) {
         int dx = path[i + 1].x - path[i].x;
         int dy = path[i + 1].y - path[i].y;
