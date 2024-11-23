@@ -26,8 +26,7 @@ Point2D getBuildingLocation(Agent *agent) {
 
             //printf("%.1f,%.1f\n", x, y);
 
-            if ((i > 100 || agent->Observation()->GetVisibility(p) == Visibility::Visible) &&
-                Aux::checkPlacementFull(p, 3, agent)) {
+            if (Aux::checkPlacementFull(p, 3, agent)) {
                 Aux::buildingLocations.push_back(p);
                 break;
             } else if (i == 499) {
@@ -43,17 +42,17 @@ Point2D getPylonLocation(Agent *agent) {
     if (Aux::pylonPointer >= Aux::pylonLocations.size()) {
         GameInfo game_info = agent->Observation()->GetGameInfo();
 
-        for (int i = 0; i < 500; i++) {
+        for (int i = 0; i < 5000; i++) {
             float x = ((float)std::rand()) * game_info.width / RAND_MAX;
             float y = ((float)std::rand()) * game_info.height / RAND_MAX;
 
             Point2D p{x, y};
 
-            if ((i > 100 || agent->Observation()->GetVisibility(p) == Visibility::Visible) &&
+            if ((i > 1000 || (imRef(Aux::influenceMap, (int)x, (int)y) != 0)) &&
                 Aux::checkPlacementFull(p, 2, agent)) {
                 Aux::pylonLocations.push_back(p);
                 break;
-            } else if (i == 499) {
+            } else if (i == 4999) {
                 return p;
             }
         }

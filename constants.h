@@ -8,6 +8,8 @@
 //#include "grid.hpp"
 //#include "tools.hpp"
 
+#define DISP ((size%2 == 0) ? 0.5 : 0)
+
 using namespace sc2;
 
 struct Cost {
@@ -44,6 +46,7 @@ Point2DI P2DI(const Point3D &p) {
 namespace Aux {
 
 map2d<int8_t> *buildingBlocked;
+map2d<int8_t> *influenceMap;
 
 std::vector<Point2D> pylonLocations = std::vector<Point2D>();
 int pylonPointer = 0;
@@ -415,8 +418,8 @@ static int theorySupply(Agent *agent) {
 }
 
 bool addPlacement(Point2D p, int size) {
-    int x = p.x - (size / 2);
-    int y = p.y - (size / 2);
+    int x = p.x - (size / 2) + DISP;
+    int y = p.y - (size / 2) + DISP;
     for (int i = x; i < x + size; i++) {
         for (int j = y; j < y + size; j++) {
             // printf("{%d,%d}", i, j);
@@ -431,8 +434,8 @@ bool addPlacement(Point2D p, UnitTypeID unit_type) {
 }
 
 bool removePlacement(Point2D p, int size) {
-    int x = p.x - (size / 2);
-    int y = p.y - (size / 2);
+    int x = p.x - (size / 2) + DISP;
+    int y = p.y - (size / 2) + DISP;
     for (int i = x; i < x + size; i++) {
         for (int j = y; j < y + size; j++) {
             imRef(buildingBlocked, i, j) = 0;
@@ -446,8 +449,8 @@ bool removePlacement(Point2D p, UnitTypeID unit_type) {
 }
 
 bool checkPlacement(Point2D p, int size) {
-    int x = p.x - (size / 2);
-    int y = p.y - (size / 2);
+    int x = p.x - (size / 2) + DISP;
+    int y = p.y - (size / 2) + DISP;
     for (int i = x; i < x + size; i++) {
         for (int j = y; j < y + size; j++) {
             //Point2D check(i, j);
@@ -460,11 +463,13 @@ bool checkPlacement(Point2D p, int size) {
 }
 
 bool checkPlacementFull(Point2D p, int size, Agent *agent) {
-    int x = p.x - (size / 2);
-    int y = p.y - (size / 2);
+    int x = p.x - (size / 2) + DISP;
+    int y = p.y - (size / 2) + DISP;
     for (int i = x; i < x + size; i++) {
         for (int j = y; j < y + size; j++) {
             // Point2D check(i, j);
+            printf("CHECK: %d,%d BB%d IP%d\n", i, j, imRef(buildingBlocked, i, j),
+                   !agent->Observation()->IsPlacable(Point2D{(float)i + 0.5F, (float)j + 0.5F}));
             if (imRef(buildingBlocked, i, j) > 0 ||
                 !agent->Observation()->IsPlacable(Point2D{(float)i + 0.5F, (float)j + 0.5F})) {
                 return false;

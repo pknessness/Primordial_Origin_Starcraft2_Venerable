@@ -98,15 +98,17 @@ namespace Macro {
                 //return (unit.unit_type == topAct.unit_type) &&
                 //       ((unit.unit_type == UNIT_TYPEID::PROTOSS_PROBE) || unit.orders.size() == 0);
                 return (unit.unit_type == topAct.unit_type) && unit.build_progress == 1.0 && 
-                       ((unit.unit_type == UNIT_TYPEID::PROTOSS_PROBE &&
-                         (unit.orders.size() == 0 || unit.orders.front().ability_id == ABILITY_ID::HARVEST_RETURN)) ||
-                        unit.orders.size() == 0);
+                    ((unit.unit_type == UNIT_TYPEID::PROTOSS_PROBE &&
+                    (unit.orders.size() == 0 || unit.orders.front().ability_id == ABILITY_ID::HARVEST_RETURN)) ||
+                    unit.orders.size() == 0);
             });
-            if (units.size() == 0)
-                continue;
 
-            UnitTypeData unit_stats =
-                agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(topAct.unit_type));
+            string diagnostics = strprintf("%s %s: ", UnitTypeToName(topAct.unit_type), AbilityTypeToName(topAct.ability));   
+            Point2D diag = Point2D(0.01, 0.01 + 0.02 * i);
+
+            UnitTypes allData = agent->Observation()->GetUnitTypeData();
+
+            UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(topAct.unit_type));
 
             int foodCap = agent->Observation()->GetFoodCap();
             int foodUsed = agent->Observation()->GetFoodUsed();
@@ -117,6 +119,8 @@ namespace Macro {
                 bool cont = false;
                 if (actions[UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
                     actions[UNIT_TYPEID::PROTOSS_PROBE].front().index = 0;
+                    diagnostics += "PYLON IN TRANSIT";
+                    agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                     continue;
                 }
                 for (int i = 0; i < pylons.size(); i++) {
@@ -125,16 +129,30 @@ namespace Macro {
                         break;
                     }
                 }
-                if (cont)
+                if (cont) {
+                    diagnostics += "PYLON BUILDING";
+                    agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                     continue;
+                }
 
                 addBuildingTop(ABILITY_ID::BUILD_PYLON, Point2D{-1, -1}, 0);
+                diagnostics += "PYLON REQUESTED";
+                agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                break;
+            }
+
+            if (units.size() == 0) {
+                diagnostics += "NO AVAILABLE UNITS";
+                agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                continue;
             }
 
             if (topAct.pos == Point2D{-1, -1}) {
                 if (topAct.ability == ABILITY_ID::BUILD_PYLON) {
                     Point2D p = getPylonLocation(agent);
                     if (p == Point2D{-1, -1}) {
+                        diagnostics += "INVALID POSITION";
+                        agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                         continue;
                     }
                     topAct.pos = p;
@@ -142,6 +160,8 @@ namespace Macro {
                 } else {
                     Point2D p = getBuildingLocation(agent);
                     if (p == Point2D{-1, -1}) {
+                        diagnostics += "INVALID POSITION";
+                        agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                         continue;
                     }
                     topAct.pos = p;
@@ -172,7 +192,7 @@ namespace Macro {
             UnitTypeID prerequisite = UNIT_TYPEID::INVALID;
 
             if (Aux::buildAbilityToUnit(topAct.ability) != UNIT_TYPEID::INVALID) {
-                UnitTypeData ability_stats = agent->Observation()->GetUnitTypeData().at(
+                UnitTypeData ability_stats = allData.at(
                     static_cast<uint32_t>(Aux::buildAbilityToUnit(topAct.ability)));
 
                 prerequisite = ability_stats.tech_requirement;
@@ -186,6 +206,8 @@ namespace Macro {
 
                 if (prerequisite != UNIT_TYPEID::INVALID && UnitManager::get(prerequisite).size() == 0) {
                     addBuildingTop(Aux::unitToBuildAbility(prerequisite), Point2D{-1, -1}, topAct.index);
+                    diagnostics += strprintf("PREREQUISITE REQUIRED: %s", UnitTypeToName(prerequisite));
+                    agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                     continue;
                 }
 
@@ -205,6 +227,8 @@ namespace Macro {
                         }
                     }
                     if (!foundPylon) {
+                        diagnostics += "NO PYLON IN VICINITY";
+                        agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                         continue;
                     }
                 }
@@ -240,8 +264,7 @@ namespace Macro {
                     dt = 0;
                 
                 if (Aux::requiresPylon(topAct.ability) && viablePylons.back()->build_progress != 1.0) {
-                    UnitTypeData pylon_stats =
-                        agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PYLON));
+                    UnitTypeData pylon_stats = allData.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PYLON));
                     bool found = false;
                     for (int i = 0; i < viablePylons.size(); i++) {
                         if (((1.0 - viablePylons[i]->build_progress) * pylon_stats.build_time / fps) < dt) {
@@ -250,13 +273,14 @@ namespace Macro {
                         }
                     }
                     if (found == false) {
+                        diagnostics += "NO ACTIVE PYLON IN VICINITY";
+                        agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
                         continue;
                     }
                 }
 
                 if (prerequisite != UNIT_TYPEID::INVALID) {
-                    UnitTypeData prereq_stats =
-                        agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(prerequisite));
+                    UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
 
                     auto prereqs = UnitManager::get(prerequisite);
                     bool found = false;
@@ -268,6 +292,8 @@ namespace Macro {
                         }
                     }
                     if (found == false) {
+                        diagnostics += "PREQUISITE NOT READY";
+                        agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
                         continue;
                     }
                 }
@@ -292,8 +318,7 @@ namespace Macro {
                 actionUnit = units[0];
 
                 if (prerequisite != UNIT_TYPEID::INVALID) {
-                    UnitTypeData prereq_stats =
-                        agent->Observation()->GetUnitTypeData().at(static_cast<uint32_t>(prerequisite));
+                    UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
 
                     auto prereqs = UnitManager::get(prerequisite);
                     bool found = false;
@@ -305,6 +330,8 @@ namespace Macro {
                         }
                     }
                     if (found == false) {
+                        diagnostics += "PREQUISITE NOT READY";
+                        agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
                         continue;
                     }
                 }
@@ -331,7 +358,12 @@ namespace Macro {
                     agent->Actions()->UnitCommand(actionUnit, topAct.ability);
                 }
                 actions[topAct.unit_type].erase(actions[topAct.unit_type].begin());
+                diagnostics += "SUCCESS";
+                agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
+                break;
             }
+            diagnostics += "NOT ENOUGH RESOURCES";
+            agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
             break;
         }
     }

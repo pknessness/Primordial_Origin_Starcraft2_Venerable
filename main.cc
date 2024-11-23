@@ -16,6 +16,7 @@ using namespace sc2;
 class Bot : public Agent {
 public:
     //std::vector<Location> path;
+    std::vector < std::vector<Location>> expansionPaths;
     std::vector<Point2DI> path;
 
     std::vector<Point3D> expansions;
@@ -57,31 +58,48 @@ public:
             auto pathToExpansion = Tool::reconstruct_path(staging_location, {int(point.x), int(point.y)}, came_from);
 
             double length = fullDist(pathToExpansion);
-            expansionDistance.push_back(length);
-        }
+            //expansionDistance.push_back(length);
 
-        for (int j = 0; j < expansions.size() - 1; j++) {
-            if (expansions[j].x == 0 && expansions[j].y == 0)
-                continue;
-            if (rankedExpansions.size() == 0) {
-                rankedExpansions.push_back(expansions[j]);  // might be useless now
-                rankedExpansionDistance.push_back(expansionDistance[j]);
-                continue;
+            for (Location l : pathToExpansion) {
+                printf("[%d,%d]", l.x, l.y);
             }
-            bool inserted = false;
-            for (int i = 0; i < rankedExpansions.size(); i++) {
-                if (rankedExpansionDistance[i] > expansionDistance[j]) {
-                    rankedExpansions.insert(rankedExpansions.begin() + i, expansions[j]);  // might be useless now
-                    rankedExpansionDistance.insert(rankedExpansionDistance.begin() + i, expansionDistance[j]);
-                    inserted = true;
+            printf("{%.1f}\n\n", length);
+
+            if (rankedExpansions.size() == 0) {
+                rankedExpansions.push_back(point);
+                rankedExpansionDistance.push_back(length);
+            }
+            for (int i = 0; i < rankedExpansions.size(); i ++) {
+                if (rankedExpansionDistance[i] > length) {
+                    rankedExpansions.insert(rankedExpansions.begin() + i, point);
+                    rankedExpansionDistance.insert(rankedExpansionDistance.begin() + i, length);
                     break;
                 }
             }
-            if (!inserted) {
-                rankedExpansions.push_back(expansions[j]);  // might be useless now
-                rankedExpansionDistance.push_back(expansionDistance[j]);
-            }
         }
+
+        //for (int j = 0; j < expansions.size() - 1; j++) {
+        //    if (expansions[j].x == 0 && expansions[j].y == 0)
+        //        continue;
+        //    if (rankedExpansions.size() == 0) {
+        //        rankedExpansions.push_back(expansions[j]);  // might be useless now
+        //        rankedExpansionDistance.push_back(expansionDistance[j]);
+        //        continue;
+        //    }
+        //    bool inserted = false;
+        //    for (int i = 0; i < rankedExpansions.size(); i++) {
+        //        if (rankedExpansionDistance[i] > expansionDistance[j]) {
+        //            rankedExpansions.insert(rankedExpansions.begin() + i, expansions[j]);  // might be useless now
+        //            rankedExpansionDistance.insert(rankedExpansionDistance.begin() + i, expansionDistance[j]);
+        //            inserted = true;
+        //            break;
+        //        }
+        //    }
+        //    if (!inserted) {
+        //        rankedExpansions.push_back(expansions[j]);  // might be useless now
+        //        rankedExpansionDistance.push_back(expansionDistance[j]);
+        //    }
+        //}
 
         //for (int i = 0; i < rankedExpansions.size(); i++) {
         //    printf("[%.1f,%.1f %.1f]\n", expansions[i].x, expansions[i].y, expansionDistance[i]);
@@ -95,16 +113,16 @@ public:
         int mapHeight = game_info.height;
 
         Point2D center = Observation()->GetCameraPos();
-        int wS = int(center.x) - 8;
+        int wS = int(center.x) - 10;
         if (wS < 0)
             wS = 0;
-        int hS = int(center.y) - 3;
+        int hS = int(center.y) - 5;
         if (hS < 0)
             hS = 0;
-        int wE = int(center.x) + 9;
+        int wE = int(center.x) + 11;
         if (wE > mapWidth)
             wE = mapWidth;
-        int hE = int(center.y) + 6;
+        int hE = int(center.y) + 8;
         if (hE > mapHeight)
             hE = mapHeight;
 
@@ -128,6 +146,8 @@ public:
                 if (imRef(Aux::buildingBlocked, w, h) != 0) {
                     boxHeight = 1;
                     c = {123,50,10};
+                } else if (imRef(Aux::influenceMap, w, h) != 0) {
+                    c = {44, 50, 210};
                 }
 
                 if (0 || !(c.r == 255 && c.g == 255 && c.b == 255) || boxHeight != 0) {
@@ -198,7 +218,7 @@ public:
                 tot += strprintf("%s %d %.1f,%.1f\n", AbilityTypeToName(it2->ability), it2->index, it2->pos.x, it2->pos.y);
             }
         }
-        Debug()->DebugTextOut(tot, Point2D(0.01, 0.01), Color(250, 50, 15), 8);
+        Debug()->DebugTextOut(tot, Point2D(0.01, 0.11), Color(250, 50, 15), 8);
     }
 
     void probeLines() {
@@ -266,6 +286,14 @@ public:
         }
     }
 
+    void expansionsLoc() {
+        for (int i = 0; i < rankedExpansions.size(); i++) {
+            Point3D p = P3D(rankedExpansions[i]);
+            Debug()->DebugSphereOut(p, 2.5, {253, 216, 53});
+            Debug()->DebugTextOut(strprintf("%.1f", rankedExpansionDistance[i]), p + Point3D{0, 0, 0.5});
+        }
+    }
+
     void pylonBuildingLoc() {
         for (int i = 0; i < Aux::pylonLocations.size(); i++) {
             Point3D p = P3D(Aux::pylonLocations[i]);
@@ -281,6 +309,7 @@ public:
     virtual void OnGameStart() final {
         last_time = clock();
         Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
+        Aux::influenceMap = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
 
         gridmap = Grid{Observation()->GetGameInfo().width, Observation()->GetGameInfo().height};
 
@@ -343,7 +372,22 @@ public:
             UnitWrapper* u = new UnitWrapper(unit);
             u->execute(this);
         }
-        Aux::addPlacement(unit->pos, unit->unit_type);
+        if (unit->is_building) {
+            Aux::addPlacement(unit->pos, unit->unit_type);
+            UnitTypes allData = Observation()->GetUnitTypeData();
+            UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(unit->unit_type));
+            GameInfo game_info = Observation()->GetGameInfo();
+
+            for (int i = std::max(0, int(unit->pos.x - unit_stats.sight_range) - 2);
+                 i < std::min(game_info.width, int(unit->pos.x + unit_stats.sight_range) + 2); i++) {
+                for (int j = std::max(0, int(unit->pos.y - unit_stats.sight_range) - 2);
+                     j < std::min(game_info.height, int(unit->pos.y + unit_stats.sight_range) + 2); j++) {
+                    if (Distance2D(Point2D{i + 0.5F, j + 0.5F}, unit->pos) < unit_stats.sight_range) {
+                        imRef(Aux::influenceMap, i, j) += 1;
+                    }
+                }
+            }
+        }
     }
 
     //! Called whenever one of the player's units has been destroyed.
@@ -352,6 +396,22 @@ public:
         UnitWrapper* u = UnitManager::find(unit->unit_type, unit->tag);
         delete u;
         Aux::removePlacement(unit->pos, unit->unit_type);
+        if (unit->is_building) {
+            Aux::removePlacement(unit->pos, unit->unit_type);
+            UnitTypes allData = Observation()->GetUnitTypeData();
+            UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(unit->unit_type));
+            GameInfo game_info = Observation()->GetGameInfo();
+
+            for (int i = std::max(0, int(unit->pos.x - unit_stats.sight_range) - 2);
+                 i < std::min(game_info.width, int(unit->pos.x + unit_stats.sight_range) + 2); i++) {
+                for (int j = std::max(0, int(unit->pos.y - unit_stats.sight_range) - 2);
+                     j < std::min(game_info.height, int(unit->pos.y + unit_stats.sight_range) + 2); j++) {
+                    if (Distance2D(Point2D{i + 0.5F, j + 0.5F}, unit->pos) < unit_stats.sight_range) {
+                        imRef(Aux::influenceMap, i, j) -= 1;
+                    }
+                }
+            }
+        }
     }
 
     //! Called when a unit becomes idle, this will only occur as an event so will only be called when the unit becomes
@@ -377,43 +437,47 @@ public:
             probe->execute(this);
         }
 
-        if (Observation()->GetGameLoop() == 30) {
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+        if (Observation()->GetGameLoop() == 2) {
+            //HOME BASE MINERALS
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
 
+            //HOME BASE VESPENE 1
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
+
+            //HOME BASE VESPENE 2
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
+
+            //NATURAL MINERALS
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
+            Macro::addProbe();//
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
+            Macro::addProbe();//
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
+            Macro::addProbe();//
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
+            Macro::addProbe();//
+
+            //NATURAL GAS 1
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+
+            //NATURAL GAS 2
             Macro::addProbe();
             Macro::addProbe();
             Macro::addProbe();
@@ -451,6 +515,11 @@ public:
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_TWILIGHTCOUNCIL, {-1, -1});
+        } else if (Observation()->GetGameLoop() == int(3.00 * 60 * 22.4)) {
+            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                               Observation()->GetUnit(UnitManager::getVespene()[2]->self)->pos);
+            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                               Observation()->GetUnit(UnitManager::getVespene()[3]->self)->pos);
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
@@ -476,6 +545,7 @@ public:
         //listUnitWraps();
         //listUnitWrapsNeutral();
         //listUnitWrapsEnemies();
+        expansionsLoc();
         listMacroActions();
         probeLines();
         orderDisplay();
