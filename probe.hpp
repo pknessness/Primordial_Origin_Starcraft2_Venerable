@@ -9,28 +9,44 @@ map<Tag, int8_t> probeTargetting;
 Point2D getBuildingLocation(Agent *agent) {
     if (Aux::buildingPointer >= Aux::buildingLocations.size()) {
         GameInfo game_info = agent->Observation()->GetGameInfo();
-
-        for (int i = 0; i < 500; i++) {
-            float theta = ((float)std::rand()) * 2 * 3.1415926 / RAND_MAX;
-            float radius = ((float)std::rand()) * Aux::PYLON_RADIUS / RAND_MAX;
-
-            // float x = ((float)std::rand()) * game_info.width / RAND_MAX;
-            // float y = ((float)std::rand()) * game_info.height / RAND_MAX;
-
-            auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
-
-            float x = std::cos(theta) * radius;
-            float y = std::sin(theta) * radius;
-
-            Point2D p = pylons[std::rand() % pylons.size()]->pos(agent) + Point2D{x, y};
-
-            //printf("%.1f,%.1f\n", x, y);
-
-            if (Aux::checkPlacementFull(p, 3, agent)) {
-                Aux::buildingLocations.push_back(p);
+        auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+        Point2D diffuse[] = {{2.5, 0.5}, {-0.5, 2.5}, {-2.5, -0.5}, {0.5, -2.5}};
+        bool found = false;
+        for (int i = 0; i < UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON).size(); i++) {
+            for (int d = 0; d < 4; d++) {
+                Point2D p = pylons[i]->pos(agent) + diffuse[d];
+                if (Aux::checkPlacementFull(p, 3, agent)) {
+                    Aux::buildingLocations.push_back(p);
+                    found = true;
+                    break;
+                }
+            }
+            if (found)
                 break;
-            } else if (i == 499) {
-                return {-1, -1};
+        }
+        if (!found) {
+            for (int i = 0; i < 500; i++) {
+                float theta = ((float)std::rand()) * 2 * 3.1415926 / RAND_MAX;
+                float radius = ((float)std::rand()) * Aux::PYLON_RADIUS / RAND_MAX;
+
+                // float x = ((float)std::rand()) * game_info.width / RAND_MAX;
+                // float y = ((float)std::rand()) * game_info.height / RAND_MAX;
+
+                auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+
+                float x = std::cos(theta) * radius;
+                float y = std::sin(theta) * radius;
+
+                Point2D p = pylons[std::rand() % pylons.size()]->pos(agent) + Point2D{x, y};
+
+                // printf("%.1f,%.1f\n", x, y);
+
+                if (Aux::checkPlacementFull(p, 3, agent)) {
+                    Aux::buildingLocations.push_back(p);
+                    break;
+                } else if (i == 499) {
+                    return {-1, -1};
+                }
             }
         }
     }
@@ -171,7 +187,12 @@ public:
                     }
                     //agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_RETURN);
                 } else {
-                    agent->Actions()->UnitCommand(self, top.build, top.pos);
+                    if (agent->Query()->Placement(top.build, top.pos)) {
+                        printf("CAN PLACE %s %.1f,%.1f\n", AbilityTypeToName(top.build), top.pos.x, top.pos.y);
+                        agent->Actions()->UnitCommand(self, top.build, top.pos);
+                    } else {
+                        return false;
+                    }
                 }
                 buildings.erase(buildings.begin());
             } else {

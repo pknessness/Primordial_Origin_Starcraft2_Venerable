@@ -10,7 +10,7 @@ public:
     UnitTypeID type;
     Point2D lastPos;
 
-    UnitWrapper(Tag self_);
+    //UnitWrapper(Tag self_);
 
     UnitWrapper(Tag self_, UnitTypeID id);
 
@@ -18,11 +18,15 @@ public:
 
     bool equals(UnitWrapper *wrapper);
 
+    inline bool exists(Agent *agent);
+
+    inline const Unit *get(Agent *agent);
+
     Point2D pos(Agent *agent);
 
     virtual bool execute(Agent *agent);
 
-    ~UnitWrapper();
+    virtual ~UnitWrapper();
 };
 
 namespace UnitManager {
@@ -123,9 +127,9 @@ namespace UnitManager {
 }  // namespace UnitManager
 
 
-UnitWrapper::UnitWrapper(Tag self_) : self(self_), type(UNIT_TYPEID::INVALID), lastPos{0, 0} {
-    printf("WHY ARE YOU USING THE DEFAULT UNITWRAPPER CONSTRUCTOR\n");
-}
+//UnitWrapper::UnitWrapper(Tag self_) : self(self_), type(UNIT_TYPEID::INVALID), lastPos{0, 0} {
+//    printf("WHY ARE YOU USING THE DEFAULT UNITWRAPPER CONSTRUCTOR\n");
+//}
 
 UnitWrapper::UnitWrapper(Tag self_, UnitTypeID type_)
     : self(self_), type(type_) {
@@ -160,6 +164,14 @@ Point2D UnitWrapper::pos(Agent *agent) {
         lastPos = unit->pos;
     }
     return lastPos;
+}
+
+inline bool UnitWrapper::exists(Agent *agent) {
+    return agent->Observation()->GetUnit(self) == nullptr;
+}
+
+inline const Unit* UnitWrapper::get(Agent *agent) {
+    return agent->Observation()->GetUnit(self);
 }
 
 bool UnitWrapper::equals(UnitWrapper *wrapper) {

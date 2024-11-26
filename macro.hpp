@@ -110,35 +110,51 @@ namespace Macro {
 
             UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(topAct.unit_type));
 
-            int foodCap = agent->Observation()->GetFoodCap();
-            int foodUsed = agent->Observation()->GetFoodUsed();
-
             auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
+            
+            //printf("R:%d C:%d U:%d\n", unit_stats)
 
-            if (unit_stats.food_required > foodCap - foodUsed ) {
-                bool cont = false;
-                if (actions[UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
-                    actions[UNIT_TYPEID::PROTOSS_PROBE].front().index = 0;
-                    diagnostics += "PYLON IN TRANSIT";
-                    agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
-                    continue;
-                }
-                for (int i = 0; i < pylons.size(); i++) {
-                    if (agent->Observation()->GetUnit(pylons[i]->self)->build_progress != 1.0) {
-                        cont = true;
-                        break;
+            UnitTypeID prerequisite = UNIT_TYPEID::INVALID;
+
+            if (Aux::buildAbilityToUnit(topAct.ability) != UNIT_TYPEID::INVALID) {
+                UnitTypeData ability_stats = allData.at(static_cast<uint32_t>(Aux::buildAbilityToUnit(topAct.ability)));
+
+                prerequisite = ability_stats.tech_requirement;
+
+                int foodCap = agent->Observation()->GetFoodCap();
+                int foodUsed = agent->Observation()->GetFoodUsed();
+
+                if (ability_stats.food_required > foodCap - foodUsed) {
+                    bool cont = false;
+                    if (actions[UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
+                        actions[UNIT_TYPEID::PROTOSS_PROBE].front().index = 0;
+                        diagnostics += "PYLON IN TRANSIT";
+                        agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                        continue;
                     }
-                }
-                if (cont) {
-                    diagnostics += "PYLON BUILDING";
-                    agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
-                    continue;
-                }
+                    for (int i = 0; i < pylons.size(); i++) {
+                        if (agent->Observation()->GetUnit(pylons[i]->self)->build_progress != 1.0) {
+                            cont = true;
+                            break;
+                        }
+                    }
+                    if (cont) {
+                        diagnostics += "PYLON BUILDING";
+                        agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                        continue;
+                    }
 
-                addBuildingTop(ABILITY_ID::BUILD_PYLON, Point2D{-1, -1}, 0);
-                diagnostics += "PYLON REQUESTED";
-                agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
-                break;
+                    addBuildingTop(ABILITY_ID::BUILD_PYLON, Point2D{-1, -1}, 0);
+                    diagnostics += "PYLON REQUESTED";
+                    agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                    break;
+                }
+            }
+
+            if (topAct.unit_type == UNIT_TYPEID::PROTOSS_GATEWAY) {
+                if (agent->Observation()->GetWarpGateCount() > 0) {
+                    
+                }
             }
 
             if (units.size() == 0) {
@@ -188,15 +204,6 @@ namespace Macro {
             //}
 
             const Unit *actionUnit;
-
-            UnitTypeID prerequisite = UNIT_TYPEID::INVALID;
-
-            if (Aux::buildAbilityToUnit(topAct.ability) != UNIT_TYPEID::INVALID) {
-                UnitTypeData ability_stats = allData.at(
-                    static_cast<uint32_t>(Aux::buildAbilityToUnit(topAct.ability)));
-
-                prerequisite = ability_stats.tech_requirement;
-            }
             
 
             //UnitTypeID prerequisite = unit_stats.tech_requirement;

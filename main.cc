@@ -10,6 +10,8 @@
 #include "constants.h"
 #include "unitmanager.hpp"
 #include "dist_transform.hpp"
+#include "zhangSuen.hpp"
+#include "BoudaoudSiderTariThinning.hpp"
 
 using namespace sc2;
 
@@ -24,6 +26,9 @@ public:
     std::vector<double> expansionDistance;
     std::vector<double> rankedExpansionDistance;
     Point2DI staging_location;
+    Point2D rally_point;
+
+    map2d<int8_t>* path_zhang_suen;
 
     clock_t last_time;
 
@@ -60,10 +65,10 @@ public:
             double length = fullDist(pathToExpansion);
             //expansionDistance.push_back(length);
 
-            for (Location l : pathToExpansion) {
-                printf("[%d,%d]", l.x, l.y);
-            }
-            printf("{%.1f}\n\n", length);
+            //for (Location l : pathToExpansion) {
+            //    printf("[%d,%d]", l.x, l.y);
+            //}
+            //printf("{%.1f}\n\n", length);
 
             if (rankedExpansions.size() == 0) {
                 rankedExpansions.push_back(point);
@@ -143,23 +148,26 @@ public:
                 //    }
                 //}
 
-                if (imRef(Aux::buildingBlocked, w, h) != 0) {
-                    boxHeight = 1;
+                if (imRef(path_zhang_suen, w, h)) {
+                    c = {250, 200, 210};
+                }
+                else if (imRef(Aux::buildingBlocked, w, h) != 0) {
+                    //boxHeight = 1;
                     c = {123,50,10};
                 } else if (imRef(Aux::influenceMap, w, h) != 0) {
                     c = {44, 50, 210};
                 }
 
                 if (0 || !(c.r == 255 && c.g == 255 && c.b == 255) || boxHeight != 0) {
-                    float height = Observation()->TerrainHeight(P2D(point));
+                    float height = Observation()->TerrainHeight(P2D(point) + Point2D{0.5F,0.5F});
 
                     
 
                     Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
                                          Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
-                    Debug()->DebugTextOut(strprintf("%d, %d", w, h),
-                                          Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
-                                          Color(200, 90, 15), fontSize);
+                    //Debug()->DebugTextOut(strprintf("%d, %d", w, h),
+                    //                      Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
+                    //                      Color(200, 90, 15), fontSize);
                     /*std::string cs = imRef(display, w, h);
                     float disp = cs.length() * 0.0667 * fontSize / 15;
                     Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1 + displace),
@@ -289,7 +297,7 @@ public:
     void expansionsLoc() {
         for (int i = 0; i < rankedExpansions.size(); i++) {
             Point3D p = P3D(rankedExpansions[i]);
-            Debug()->DebugSphereOut(p, 2.5, {253, 216, 53});
+            Debug()->DebugSphereOut(p, 12, {253, 216, 53});
             Debug()->DebugTextOut(strprintf("%.1f", rankedExpansionDistance[i]), p + Point3D{0, 0, 0.5});
         }
     }
@@ -310,10 +318,45 @@ public:
         last_time = clock();
         Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
         Aux::influenceMap = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
+        path_zhang_suen = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
+
+        for (int i = 0; i < path_zhang_suen->width(); i++) {
+            for (int j = 0; j < path_zhang_suen->height(); j++) {
+                imRef(path_zhang_suen, i, j) = Observation()->IsPathable(Point2D{i+0.5F,j+0.5F});
+            }
+        }
+
+        Units units = Observation()->GetUnits(sc2::Unit::Alliance::Neutral);
+
+        for (const Unit* unit : units) {
+            if (Aux::isMineral(*unit)) {
+                imRef(path_zhang_suen, int(unit->pos.x + 0.5F), int(unit->pos.y)) = 1;
+                imRef(path_zhang_suen, int(unit->pos.x - 0.5F), int(unit->pos.y)) = 1;
+                imRef(Aux::buildingBlocked, int(unit->pos.x + 0.5F), int(unit->pos.y)) = 1;
+                imRef(Aux::buildingBlocked, int(unit->pos.x - 0.5F), int(unit->pos.y)) = 1;
+            } else if (Aux::isVespene(*unit)) {
+                for (int i = -1; i <= 1; i++) {
+                    for (int j = -1; j <= 1; j++) {
+                        imRef(path_zhang_suen, int(unit->pos.x + i), int(unit->pos.y + j)) = 1;
+                        imRef(Aux::buildingBlocked, int(unit->pos.x + i), int(unit->pos.y + j)) = 1;
+                    }
+                }
+            }
+        }
+
+        for (int i = -4; i <= 4; i++) {
+            for (int j = -4; j <= 4; j++) {
+                imRef(path_zhang_suen, int(Observation()->GetStartLocation().x + i),
+                      int(Observation()->GetStartLocation().y + j)) = 1;
+            }
+        }
+
+        zhangSuenThinning(path_zhang_suen, this);
+        //thinning_BST(path_zhang_suen, this);
 
         gridmap = Grid{Observation()->GetGameInfo().width, Observation()->GetGameInfo().height};
 
-        const ObservationInterface* observe = Observation();
+        //const ObservationInterface* observe = Observation();
         //PathFinder pf(observe->GetGameInfo().width, observe->GetGameInfo().height);
         //cout << pf.findPath(observe->GetGameInfo().start_locations[0], observe->GetGameInfo().enemy_start_locations[0], this) << endl;
         //unordered_set<Location> walls{{5, 0}, {5, 1}, {2, 2}, {5, 2}, {2, 3}, {5, 3}, {2, 4}, {5, 4},
@@ -332,24 +375,37 @@ public:
         initializeStartings();
         initializeExpansions();
 
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addProbe();
-        //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
-        //Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-3,0});
-        ////Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR, P2D(staging_location) - Point2D{-3, 0});
-        //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR, Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
-        //Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
-        //Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{3, 0});
-        //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-        //                   Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
+        vector<Point2DI> possiblePoints;
+
+        for (int i = -12; i <= 12; i++) {
+            for (int j = -12; j <= 12; j++) {
+                float d = Distance2D(Point2D{i + 0.5F, j + 0.5F}, {0,0});
+                if (imRef(path_zhang_suen, int(rankedExpansions[0].x) + i, int(rankedExpansions[0].y) + j) == 1 &&
+                    d > 10 && d < 12) {
+                    possiblePoints.push_back({i + (int)rankedExpansions[0].x, j + (int)rankedExpansions[0].y});
+                }
+            }
+        }
+
+        float min = -1;
+
+        for (int i = 0; i < possiblePoints.size(); i++) {
+            auto came_from =
+                jps(gridmap, {Observation()->GetGameInfo().width / 2, Observation()->GetGameInfo().height / 2},
+                                 {int(possiblePoints[i].x), int(possiblePoints[i].y)}, Tool::euclidean, this);
+            auto pathToExpansion = Tool::reconstruct_path(
+                {Observation()->GetGameInfo().width / 2, Observation()->GetGameInfo().height / 2},
+                                       {int(possiblePoints[i].x), int(possiblePoints[i].y)}, came_from);
+
+            double length = fullDist(pathToExpansion);
+            if (min == -1 || min > length) {
+                min = length;
+                rally_point = P2D(possiblePoints[i]) + Point2D{0.5F, 0.5F};
+            }
+        }
+
+        squads.emplace_back();
+        squads[0].defend(rally_point);
     }
 
     //! Called when a game has ended.
@@ -366,12 +422,15 @@ public:
         if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
             Probe *u = new Probe(unit->tag);
             u->execute(this);
-        } else {
+        } else if (!unit->is_building) {
+            ArmyUnit* u = new ArmyUnit(unit);
+        } else{
             //UnitWrapper* u = new UnitWrapper(unit->tag, unit->unit_type);
             //u->execute(this);
             UnitWrapper* u = new UnitWrapper(unit);
             u->execute(this);
         }
+        //else
         if (unit->is_building) {
             Aux::addPlacement(unit->pos, unit->unit_type);
             UnitTypes allData = Observation()->GetUnitTypeData();
@@ -388,6 +447,9 @@ public:
                 }
             }
         }
+        //else {
+        //    ArmyUnit* u = new ArmyUnit(unit);
+        //}
     }
 
     //! Called whenever one of the player's units has been destroyed.
@@ -436,6 +498,20 @@ public:
             Probe* probe = ((Probe*)*it);
             probe->execute(this);
         }
+
+        string s = "";
+        for (int i = 0; i < squads.size(); i ++) {
+            squads[i].execute(this);
+            s += strprintf("SQUAD%d %s %.1f,%.1f R[%.1f]:\n", i, SquadModeToString(squads[i].mode),
+                           squads[i].location.x, squads[i].location.y, squads[i].armyballRadius());
+            for (int a = 0; a < squads[i].army.size(); a++) {
+                squads[i].army[a]->execute(this);
+                s += strprintf("%s\n", UnitTypeToName(squads[i].army[a]->type));
+            }
+            s += '\n';
+            Debug()->DebugSphereOut(P3D(squads[i].center(this)), squads[i].armyballRadius());
+        }
+        Debug()->DebugTextOut(s, Point2D(0.71, 0.11), Color(1, 42, 212), 8);
 
         if (Observation()->GetGameLoop() == 2) {
             //HOME BASE MINERALS
@@ -502,6 +578,7 @@ public:
                                Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
             Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
             Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, {-1, -1});
+            Macro::addAction(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE);
             Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
                                Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
             Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
@@ -516,10 +593,11 @@ public:
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_TWILIGHTCOUNCIL, {-1, -1});
         } else if (Observation()->GetGameLoop() == int(3.00 * 60 * 22.4)) {
-            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-                               Observation()->GetUnit(UnitManager::getVespene()[2]->self)->pos);
-            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-                               Observation()->GetUnit(UnitManager::getVespene()[3]->self)->pos);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL, ABILITY_ID::RESEARCH_BLINK);
+            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+            //                   Observation()->GetUnit(UnitManager::getVespene()[2]->self)->pos);
+            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+            //                   Observation()->GetUnit(UnitManager::getVespene()[3]->self)->pos);
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
@@ -535,13 +613,28 @@ public:
             Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_WARPPRISM);
         }
 
+        int spareMinerals = Observation()->GetMinerals();
+        int spareVespene = Observation()->GetVespene();
+
+        for (auto it = Macro::actions.begin(); it != Macro::actions.end(); it++) {
+            auto all = it->second;
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                Cost c = it2->cost(this);
+                spareMinerals -= c.minerals;
+                spareVespene -= c.vespene;
+            }
+        }
+        if (spareMinerals > 150 && spareVespene > 75) {
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+        }
+
         clock_t new_time = clock();
         int dt = (new_time - last_time);
         last_time = new_time;
-        Debug()->DebugTextOut(strprintf("%d", dt), Point2D(0.10, 0.01), Color(100, 190, 215), 8);
+        Debug()->DebugTextOut(strprintf("%d", dt), Point2D(0.10, 0.10), Color(100, 190, 215), 16);
 
         grid();
-        pylonBuildingLoc();
+        //pylonBuildingLoc();
         //listUnitWraps();
         //listUnitWrapsNeutral();
         //listUnitWrapsEnemies();
@@ -612,7 +705,7 @@ int main(int argc, char* argv[]) {
     std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map",  "5_13/Equilibrium513AIE.SC2Map",
                            "5_13/GoldenAura513AIE.SC2Map", "5_13/Gresvan513AIE.SC2Map",
                            "5_13/HardLead513AIE.SC2Map",   "5_13/SiteDelta513AIE.SC2Map"};
-    int r = 5;  //(std::rand() % 12000)/2000;
+    int r = std::rand() % 6;
     printf("rand %d [%d %d %d %d %d %d] %d\n", r, std::rand(), std::rand(), std::rand(), std::rand(), std::rand(), std::rand(), RAND_MAX);
 
     coordinator.StartGame(maps[r]);
@@ -622,7 +715,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-//make sure dead probe calls unitwrapper destructor correctly
+//add check for no possible units that can execute an action at all
 
 //have nexus stop checking when it has two vespenes
 //fix probe targetting
