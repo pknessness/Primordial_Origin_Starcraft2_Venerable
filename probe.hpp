@@ -151,7 +151,7 @@ public:
             
         } else {
             Building top = buildings[0];
-            if (Distance2D(agent->Observation()->GetUnit(self)->pos, top.pos) < 1.75) {
+            if (Distance2D(agent->Observation()->GetUnit(self)->pos, top.pos) < 2) {
                 if (Aux::requiresPylon(top.build)) {
                     auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
                     bool foundPylon = false;

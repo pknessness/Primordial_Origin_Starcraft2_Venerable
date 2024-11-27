@@ -23,6 +23,7 @@ public:
     inline const Unit *get(Agent *agent);
 
     Point2D pos(Agent *agent);
+    Point3D pos3D(Agent *agent);
 
     virtual bool execute(Agent *agent);
 
@@ -164,6 +165,14 @@ Point2D UnitWrapper::pos(Agent *agent) {
         lastPos = unit->pos;
     }
     return lastPos;
+}
+
+Point3D UnitWrapper::pos3D(Agent *agent) {
+    const Unit *unit = agent->Observation()->GetUnit(self);
+    if (unit != nullptr) {
+        return unit->pos;
+    }
+    return {0,0,0};
 }
 
 inline bool UnitWrapper::exists(Agent *agent) {

@@ -127,7 +127,7 @@ public:
         int wE = int(center.x) + 11;
         if (wE > mapWidth)
             wE = mapWidth;
-        int hE = int(center.y) + 8;
+        int hE = int(center.y) + 14;
         if (hE > mapHeight)
             hE = mapHeight;
 
@@ -250,23 +250,26 @@ public:
             if (unit->orders.size() == 0)
                 continue;
             #define LETTER_DISP -0.07F
+            string s = "";
             if (unit->orders[0].target_unit_tag != NullTag && unit->orders[0].target_pos.x != 0 && unit->orders[0].target_pos.y != 0){
-                string s = strprintf("%s [%lx] [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                s += strprintf("%s [%lx] [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
                                      unit->orders[0].target_unit_tag, unit->orders[0].target_pos.x,
                                      unit->orders[0].target_pos.y);
-                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
+                
             }else if (unit->orders[0].target_pos.x != 0 && unit->orders[0].target_pos.y != 0) {
-                string s = strprintf("%s [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
+                s += strprintf("%s [%.1f, %.1f]", AbilityTypeToName(unit->orders[0].ability_id),
                                       unit->orders[0].target_pos.x, unit->orders[0].target_pos.y);
-                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
             } else if (unit->orders[0].target_unit_tag != NullTag) {
-                string s = strprintf("%s [%lx]", AbilityTypeToName(unit->orders[0].ability_id),
+                s += strprintf("%s [%lx]", AbilityTypeToName(unit->orders[0].ability_id),
                                      unit->orders[0].target_unit_tag);
-                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
             } else {
-                string s = strprintf("%s", AbilityTypeToName(unit->orders[0].ability_id));
-                Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
+                s += strprintf("%s", AbilityTypeToName(unit->orders[0].ability_id));
             }
+
+            if (unit->weapon_cooldown != 0) {
+                s += strprintf(" %.1fs", unit->weapon_cooldown);
+            }
+            Debug()->DebugTextOut(s, unit->pos + Point3D{s.size() * LETTER_DISP, 0, 0.5}, Color(100, 210, 55), 8);
         }
     }
 
@@ -341,6 +344,9 @@ public:
                         imRef(Aux::buildingBlocked, int(unit->pos.x + i), int(unit->pos.y + j)) = 1;
                     }
                 }
+            } else {
+                printf("NEUTRAL:%s\n", UnitTypeToName(unit->unit_type));
+                Aux::addPlacement(unit->pos, unit->unit_type);
             }
         }
 
@@ -375,6 +381,8 @@ public:
         initializeStartings();
         initializeExpansions();
 
+        Point2D middle{Observation()->GetGameInfo().width / 2.0F, Observation()->GetGameInfo().height / 2.0F};
+
         vector<Point2DI> possiblePoints;
 
         for (int i = -12; i <= 12; i++) {
@@ -391,10 +399,9 @@ public:
 
         for (int i = 0; i < possiblePoints.size(); i++) {
             auto came_from =
-                jps(gridmap, {Observation()->GetGameInfo().width / 2, Observation()->GetGameInfo().height / 2},
+                jps(gridmap, middle,
                                  {int(possiblePoints[i].x), int(possiblePoints[i].y)}, Tool::euclidean, this);
-            auto pathToExpansion = Tool::reconstruct_path(
-                {Observation()->GetGameInfo().width / 2, Observation()->GetGameInfo().height / 2},
+            auto pathToExpansion = Tool::reconstruct_path(Location(middle),
                                        {int(possiblePoints[i].x), int(possiblePoints[i].y)}, came_from);
 
             double length = fullDist(pathToExpansion);
@@ -406,6 +413,9 @@ public:
 
         squads.emplace_back();
         squads[0].defend(rally_point);
+
+        //Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
+        //Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
     }
 
     //! Called when a game has ended.
@@ -506,7 +516,7 @@ public:
                            squads[i].location.x, squads[i].location.y, squads[i].armyballRadius());
             for (int a = 0; a < squads[i].army.size(); a++) {
                 squads[i].army[a]->execute(this);
-                s += strprintf("%s\n", UnitTypeToName(squads[i].army[a]->type));
+                s += strprintf("%s %.1fs\n", UnitTypeToName(squads[i].army[a]->type), squads[i].army[a]->get(this)->weapon_cooldown);
             }
             s += '\n';
             Debug()->DebugSphereOut(P3D(squads[i].center(this)), squads[i].armyballRadius());

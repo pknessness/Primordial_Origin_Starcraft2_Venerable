@@ -43,6 +43,11 @@ Point2DI P2DI(const Point3D &p) {
     return Point2DI(p.x, p.y);
 }
 
+Point2D normalize(const Point2D& p) {
+    return p / (std::sqrt(p.x * p.x + p.y * p.y));
+ 
+}
+
 namespace Aux {
 
 map2d<int8_t> *buildingBlocked;
@@ -346,6 +351,18 @@ static int structureDiameter(UnitTypeID type) {
             return 3;
         case (uint32_t(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL)):
             return 3;
+        case (uint32_t(UNIT_TYPEID::NEUTRAL_DESTRUCTIBLECITYDEBRIS6X6)):
+            return 6;
+        case (uint32_t(UNIT_TYPEID::NEUTRAL_DESTRUCTIBLEDEBRIS6X6)):
+            return 6;
+        case (uint32_t(UNIT_TYPEID::NEUTRAL_DESTRUCTIBLEROCK6X6)):
+            return 6;
+        case (uint32_t(UNIT_TYPEID::NEUTRAL_UNBUILDABLEBRICKSDESTRUCTIBLE)):
+            return 2;
+        case (uint32_t(UNIT_TYPEID::NEUTRAL_UNBUILDABLEPLATESDESTRUCTIBLE)):
+            return 2;
+        case (uint32_t(UNIT_TYPEID::UNBUILDABLEROCKSDESTRUCTIBLE)):
+            return 2;
         default:
             return 0;
     }
@@ -468,8 +485,8 @@ bool checkPlacementFull(Point2D p, int size, Agent *agent) {
     for (int i = x; i < x + size; i++) {
         for (int j = y; j < y + size; j++) {
             // Point2D check(i, j);
-            printf("CHECK: %d,%d BB%d IP%d\n", i, j, imRef(buildingBlocked, i, j),
-                   !agent->Observation()->IsPlacable(Point2D{(float)i + 0.5F, (float)j + 0.5F}));
+            //printf("CHECK: %d,%d BB%d IP%d\n", i, j, imRef(buildingBlocked, i, j),
+            //       !agent->Observation()->IsPlacable(Point2D{(float)i + 0.5F, (float)j + 0.5F}));
             if (imRef(buildingBlocked, i, j) > 0 ||
                 !agent->Observation()->IsPlacable(Point2D{(float)i + 0.5F, (float)j + 0.5F})) {
                 return false;
