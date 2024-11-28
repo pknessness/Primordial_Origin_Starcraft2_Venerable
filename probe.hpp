@@ -85,7 +85,11 @@ public:
     vector<Building> buildings;
     AvailableAbilities abilities;
 
-    Probe(Tag self_) : UnitWrapper(self_, UNIT_TYPEID::PROTOSS_PROBE) {
+    //Probe(Tag self_) : UnitWrapper(self_, UNIT_TYPEID::PROTOSS_PROBE) {
+    //    target = 0;
+    //}
+
+    Probe(const Unit* unit) : UnitWrapper(unit) {
         target = 0;
     }
 

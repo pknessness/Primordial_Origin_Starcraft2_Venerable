@@ -455,7 +455,7 @@ public:
             return;
         }
         if (unit->unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
-            Probe *u = new Probe(unit->tag);
+            Probe *u = new Probe(unit);
             u->execute(this);
         } else if (!unit->is_building) {
             ArmyUnit* u = new ArmyUnit(unit);
@@ -512,6 +512,7 @@ public:
         } else if(unit->alliance == Unit::Alliance::Enemy) {
             UnitWrapper* u = UnitManager::findEnemy(unit->unit_type, unit->tag);
             delete u;
+            printf("HOSTILE %s %Ix DEAD\n", UnitTypeToName(unit->unit_type), unit->tag);
             if (unit->is_building) {
                 Aux::removePlacement(unit->pos, unit->unit_type);
                 UnitTypes allData = Observation()->GetUnitTypeData();
@@ -774,10 +775,11 @@ int main(int argc, char* argv[]) {
 
     Bot bot;
     Difficulty diff = Difficulty::Medium;
+    Race race = Race::Terran;
     if (std::rand() % 2 == 1) {
-        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(Race::Random, diff)});
+        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
     } else {
-        coordinator.SetParticipants({CreateComputer(Race::Random, diff), CreateParticipant(Race::Protoss, &bot)});
+        coordinator.SetParticipants({CreateComputer(race, diff), CreateParticipant(Race::Protoss, &bot)});
     }
 
     coordinator.LaunchStarcraft();
