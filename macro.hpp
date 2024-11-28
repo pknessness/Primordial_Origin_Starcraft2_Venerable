@@ -93,7 +93,7 @@ namespace Macro {
             if (currentAction.unit_type == UNIT_TYPEID::PROTOSS_GATEWAY &&
                 agent->Observation()->GetWarpGateCount() > 0) {
                 it->second.front().unit_type = UNIT_TYPEID::PROTOSS_WARPGATE;
-                it->second.front().pos = {-1, -1};
+                //it->second.front().pos = {-1, -1};
                 if (currentAction.ability == ABILITY_ID::TRAIN_ZEALOT) {
                     it->second.front().ability = ABILITY_ID::TRAINWARP_ZEALOT;
                 } else if (currentAction.ability == ABILITY_ID::TRAIN_STALKER) {
@@ -130,17 +130,7 @@ namespace Macro {
             if (inserted == false) {
                 topActions.push_back(currentAction);
             }
-            //for (MacroAction a : topActions) {
-            //    //topA += strprintf("%s %d\n", AbilityTypeToName(a.ability), a.index);
-            //    printf("[%s %d]", AbilityTypeToName(a.ability), a.index);
-            //}
         }
-        //string topA = "";
-        //for (MacroAction a : topActions) {
-        //    topA += strprintf("%s %d\n", AbilityTypeToName(a.ability), a.index);
-        //    //printf("\n%s %d\n", AbilityTypeToName(a.ability), a.index);
-        //}
-        //agent->Debug()->DebugTextOut(topA, Point2D(0.23, 0.01), Color(100, 190, 215), 8);
         diagnostics = "";
         for (int i = 0; i < topActions.size(); i ++) {
             MacroAction topAct = topActions[i];
@@ -157,9 +147,9 @@ namespace Macro {
             diagnostics += strprintf("%s %s: ", UnitTypeToName(topAct.unit_type), AbilityTypeToName(topAct.ability));   
             Point2D diag = Point2D(0.01, 0.01 + 0.02 * i);
 
-            UnitTypes allData = agent->Observation()->GetUnitTypeData();
+            //UnitTypes allData = agent->Observation()->GetUnitTypeData();
 
-            UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(topAct.unit_type));
+            UnitTypeData unit_stats = Aux::getStats(topAct.unit_type, agent); //allData.at(static_cast<uint32_t>(topAct.unit_type));
 
             auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
             
@@ -168,7 +158,8 @@ namespace Macro {
             UnitTypeID prerequisite = UNIT_TYPEID::INVALID;
 
             if (Aux::buildAbilityToUnit(topAct.ability) != UNIT_TYPEID::INVALID) {
-                UnitTypeData ability_stats = allData.at(static_cast<uint32_t>(Aux::buildAbilityToUnit(topAct.ability)));
+                //UnitTypeData ability_stats = allData.at(static_cast<uint32_t>());
+                UnitTypeData ability_stats = Aux::getStats(Aux::buildAbilityToUnit(topAct.ability), agent);
 
                 prerequisite = ability_stats.tech_requirement;
 
@@ -177,7 +168,7 @@ namespace Macro {
 
                 if (ability_stats.food_required > foodCap - foodUsed) {
                     bool cont = false;
-                    if (actions[UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
+                    if (actions[UNIT_TYPEID::PROTOSS_PROBE].size() != 0 && actions [UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
                         actions[UNIT_TYPEID::PROTOSS_PROBE].front().index = 0;
                         diagnostics += "PYLON IN TRANSIT\n\n";
                         //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
@@ -199,12 +190,6 @@ namespace Macro {
                     diagnostics += "PYLON REQUESTED\n\n";
                     //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                     break;
-                }
-            }
-
-            if (topAct.unit_type == UNIT_TYPEID::PROTOSS_GATEWAY) {
-                if (agent->Observation()->GetWarpGateCount() > 0) {
-                    
                 }
             }
 
@@ -241,66 +226,6 @@ namespace Macro {
                         topAct.pos = p;
                         actions[topAct.unit_type].front().pos = p;
                     }
-                } else if (topAct.unit_type == UNIT_TYPEID::PROTOSS_WARPGATE) {
-                    auto sources = agent->Observation()->GetPowerSources();
-                    int index = -1;
-                    for (int i = 0; i < sources.size(); i++) {  
-                        if (index == -1 || Distance2D(sources[i].position, squads[0].center(agent)) <
-                                               Distance2D(sources[index].position, squads[0].center(agent))) {
-                            index = i;
-                        }
-                    }
-                    if (index == -1) {
-                        diagnostics += strprintf("NO PYLONS???\n\n");
-                        continue;
-                    }
-                    for (int ao = 0; ao < 200; ao++) {
-                        float theta = ((float)std::rand()) * 2 * 3.1415926 / RAND_MAX;
-                        float radius = ((float)std::rand()) * sources[i].radius / RAND_MAX;
-
-                        float x = std::cos(theta) * radius;
-                        float y = std::sin(theta) * radius;
-
-                        Point2D p = sources[index].position + Point2D{x, y};
-
-                        if (Aux::checkPlacementFull(p, 2, agent)) {
-                            topAct.pos = p;
-                            break;
-                        }
-                    }
-                    if (topAct.pos == Point2D{-1, -1}) {
-                        diagnostics += strprintf("NO WARP LOCATION FOUND\n\n");
-                        continue;
-                    }
-                    //auto prisms = UnitManager::get(UNIT_TYPEID::PROTOSS_WARPPRISM);
-                    //if (prisms.size() != 0) {
-                    //    UnitWrapper *prismWrapper = nullptr;
-                    //    for (auto prism : prisms) {
-                    //         if (prismWrapper == nullptr ||
-                    //             Distance2D(prism->pos(agent), squads[0].center(agent)) <
-                    //                 Distance2D(prismWrapper->pos(agent), squads[0].center(agent))) {
-                    //             prismWrapper = prism;
-                    //         }
-                    //    }
-                    //    agent->Actions()->UnitCommand(prismWrapper->self, ABILITY_ID::MORPH_WARPPRISMPHASINGMODE);
-                    //    agent->Actions()->UnitCommand(actionUnit, topAct.ability, prismWrapper->pos(agent));
-                    //} else {
-                    //    float theta = ((float)std::rand()) * 2 * 3.1415926 / RAND_MAX;
-                    //    float radius = ((float)std::rand()) * Aux::PYLON_RADIUS / RAND_MAX;
-
-                    //    // float x = ((float)std::rand()) * game_info.width / RAND_MAX;
-                    //    // float y = ((float)std::rand()) * game_info.height / RAND_MAX;
-
-                    //    auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
-
-                    //    float x = std::cos(theta) * radius;
-                    //    float y = std::sin(theta) * radius;
-
-                    //    Point2D p = pylons[std::rand() % pylons.size()]->pos(agent) + Point2D{x, y};
-                    //    if (Aux::checkPlacementFull(p, 2, agent)) {
-                    //        agent->Actions()->UnitCommand(actionUnit, topAct.ability, p);
-                    //    }
-                    //}
                 } else {
                     diagnostics += strprintf("NO LOCATION\n\n");
                     continue;
@@ -308,6 +233,39 @@ namespace Macro {
                     //continue;
                 }
 
+            }
+
+            if (topAct.unit_type == UNIT_TYPEID::PROTOSS_WARPGATE) {
+                auto sources = agent->Observation()->GetPowerSources();
+                int index = -1;
+                for (int i = 0; i < sources.size(); i++) {
+                    if (index == -1 || Distance2D(sources[i].position, topAct.pos) <
+                                           Distance2D(sources[index].position, topAct.pos)) {
+                        index = i;
+                    }
+                }
+                if (index == -1) {
+                    diagnostics += strprintf("NO PYLONS???\n\n");
+                    continue;
+                }
+                for (int ao = 0; ao < 200; ao++) {
+                    float theta = ((float)std::rand()) * 2 * 3.1415926 / RAND_MAX;
+                    float radius = ((float)std::rand()) * sources[index].radius / RAND_MAX;
+
+                    float x = std::cos(theta) * radius;
+                    float y = std::sin(theta) * radius;
+
+                    Point2D p = sources[index].position + Point2D{x, y};
+
+                    if (Aux::checkPlacementFull(p, 2, agent)) {
+                        topAct.pos = p;
+                        break;
+                    }
+                }
+                if (topAct.pos == Point2D{-1, -1}) {
+                    diagnostics += strprintf("NO WARP LOCATION FOUND\n\n");
+                    continue;
+                }
             }
 
             Cost c = Aux::abilityToCost(topAct.ability, agent);
@@ -400,7 +358,9 @@ namespace Macro {
                     dt = 0;
                 
                 if (Aux::requiresPylon(topAct.ability) && viablePylons.back()->build_progress != 1.0) {
-                    UnitTypeData pylon_stats = allData.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PYLON));
+                    //UnitTypeData pylon_stats = allData.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PYLON));
+                    UnitTypeData pylon_stats = Aux::getStats(UNIT_TYPEID::PROTOSS_PYLON, agent);
+
                     bool found = false;
                     for (int i = 0; i < viablePylons.size(); i++) {
                         if (((1.0 - viablePylons[i]->build_progress) * pylon_stats.build_time / fps) < dt) {
@@ -416,7 +376,8 @@ namespace Macro {
                 }
 
                 if (prerequisite != UNIT_TYPEID::INVALID) {
-                    UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
+                    //UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
+                    UnitTypeData prereq_stats = Aux::getStats(prerequisite, agent);
 
                     auto prereqs = UnitManager::get(prerequisite);
                     bool found = false;
@@ -465,7 +426,8 @@ namespace Macro {
                 }
 
                 if (prerequisite != UNIT_TYPEID::INVALID) {
-                    UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
+                    //UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
+                    UnitTypeData prereq_stats = Aux::getStats(prerequisite, agent);
 
                     auto prereqs = UnitManager::get(prerequisite);
                     bool found = false;

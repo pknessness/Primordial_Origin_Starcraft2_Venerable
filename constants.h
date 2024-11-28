@@ -4,6 +4,7 @@
 #include <sc2api/sc2_interfaces.h>
 
 #include "map2d.hpp"
+#include "profiler.hpp"
 //#include "jps.hpp"
 //#include "grid.hpp"
 //#include "tools.hpp"
@@ -11,6 +12,12 @@
 #define DISP ((size%2 == 0) ? 0.5 : 0)
 
 using namespace sc2;
+
+//enum Composition { NONE, AIR, GND, BOTH };
+
+//#define Composition Weapon::TargetType
+using Composition = Weapon::TargetType;
+using Targets = std::map<Tag, Tags>;
 
 struct Cost {
     unsigned int minerals = 0;
@@ -52,6 +59,12 @@ namespace Aux {
 
 map2d<int8_t> *buildingBlocked;
 map2d<int8_t> *influenceMap;
+map2d<int8_t> *influenceMapEnemy;
+
+bool init_data = false;
+UnitTypes cached_data;
+
+std::map<UnitTypeID, UnitTypeData> statsMap = std::map<UnitTypeID, UnitTypeData>();
 
 std::vector<Point2D> pylonLocations = std::vector<Point2D>();
 int pylonPointer = 0;
@@ -63,6 +76,20 @@ constexpr auto MINERALS_PER_PROBE_PER_SEC = 55.0 / 60;
 constexpr auto VESPENE_PER_PROBE_PER_SEC = 61.0 / 60;
 
 constexpr int PYLON_RADIUS = 6;
+
+UnitTypes allData(Agent *agent) {
+    if (!init_data) {
+        cached_data = agent->Observation()->GetUnitTypeData();
+    }
+    return cached_data;
+}
+
+UnitTypeData getStats(UnitTypeID type, Agent *agent) {
+    if (statsMap.find(type) == statsMap.end()) {
+        statsMap[type] = allData(agent).at(static_cast<uint32_t>(type));
+    }
+    return statsMap[type];
+}
 
 static bool checkPathable(int x, int y, Agent *agent) {
     return agent->Observation()->IsPathable({float(x), float(y)});
@@ -130,57 +157,45 @@ static UnitTypeID buildAbilityToUnit(AbilityID build_ability) {
             return UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE;
         case (uint32_t(ABILITY_ID::BUILD_TWILIGHTCOUNCIL)):
             return UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL;
-        case(uint32_t(ABILITY_ID::TRAINWARP_ADEPT)):
-	        return UNIT_TYPEID::PROTOSS_ADEPT;
-        case(uint32_t(ABILITY_ID::TRAINWARP_DARKTEMPLAR)):
-	        return UNIT_TYPEID::PROTOSS_DARKTEMPLAR;
-        case(uint32_t(ABILITY_ID::TRAINWARP_HIGHTEMPLAR)):
-            return UNIT_TYPEID::PROTOSS_HIGHTEMPLAR;
-        case(uint32_t(ABILITY_ID::TRAINWARP_SENTRY)):
-            return UNIT_TYPEID::PROTOSS_SENTRY;
-        case(uint32_t(ABILITY_ID::TRAINWARP_STALKER)):
-            return UNIT_TYPEID::PROTOSS_STALKER;
-        case(uint32_t(ABILITY_ID::TRAINWARP_ZEALOT)):
-            return UNIT_TYPEID::PROTOSS_ZEALOT;
-        case(uint32_t(ABILITY_ID::TRAIN_ADEPT)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_ADEPT)):
             return UNIT_TYPEID::PROTOSS_ADEPT;
-        case(uint32_t(ABILITY_ID::TRAIN_ARCHON)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_ARCHON)):
             return UNIT_TYPEID::PROTOSS_ARCHON;
-        case(uint32_t(ABILITY_ID::TRAIN_CARRIER)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_CARRIER)):
             return UNIT_TYPEID::PROTOSS_CARRIER;
-        case(uint32_t(ABILITY_ID::TRAIN_COLOSSUS)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_COLOSSUS)):
             return UNIT_TYPEID::PROTOSS_COLOSSUS;
-        case(uint32_t(ABILITY_ID::TRAIN_DARKTEMPLAR)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_DARKTEMPLAR)):
             return UNIT_TYPEID::PROTOSS_DARKTEMPLAR;
-        case(uint32_t(ABILITY_ID::TRAIN_DISRUPTOR)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_DISRUPTOR)):
             return UNIT_TYPEID::PROTOSS_DISRUPTOR;
-        case(uint32_t(ABILITY_ID::TRAIN_HIGHTEMPLAR)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_HIGHTEMPLAR)):
             return UNIT_TYPEID::PROTOSS_HIGHTEMPLAR;
-        case(uint32_t(ABILITY_ID::TRAIN_IMMORTAL)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_IMMORTAL)):
             return UNIT_TYPEID::PROTOSS_IMMORTAL;
-        case(uint32_t(ABILITY_ID::TRAIN_MOTHERSHIP)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_MOTHERSHIP)):
             return UNIT_TYPEID::PROTOSS_MOTHERSHIP;
-        case(uint32_t(ABILITY_ID::TRAIN_MOTHERSHIPCORE)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_MOTHERSHIPCORE)):
             return UNIT_TYPEID::PROTOSS_MOTHERSHIPCORE;
-        case(uint32_t(ABILITY_ID::TRAIN_OBSERVER)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_OBSERVER)):
             return UNIT_TYPEID::PROTOSS_OBSERVER;
-        case(uint32_t(ABILITY_ID::TRAIN_ORACLE)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_ORACLE)):
             return UNIT_TYPEID::PROTOSS_ORACLE;
-        case(uint32_t(ABILITY_ID::TRAIN_PHOENIX)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_PHOENIX)):
             return UNIT_TYPEID::PROTOSS_PHOENIX;
-        case(uint32_t(ABILITY_ID::TRAIN_PROBE)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_PROBE)):
             return UNIT_TYPEID::PROTOSS_PROBE;
-        case(uint32_t(ABILITY_ID::TRAIN_SENTRY)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_SENTRY)):
             return UNIT_TYPEID::PROTOSS_SENTRY;
-        case(uint32_t(ABILITY_ID::TRAIN_STALKER)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_STALKER)):
             return UNIT_TYPEID::PROTOSS_STALKER;
-        case(uint32_t(ABILITY_ID::TRAIN_TEMPEST)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_TEMPEST)):
             return UNIT_TYPEID::PROTOSS_TEMPEST;
-        case(uint32_t(ABILITY_ID::TRAIN_VOIDRAY)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_VOIDRAY)):
             return UNIT_TYPEID::PROTOSS_VOIDRAY;
-        case(uint32_t(ABILITY_ID::TRAIN_WARPPRISM)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_WARPPRISM)):
             return UNIT_TYPEID::PROTOSS_WARPPRISM;
-        case(uint32_t(ABILITY_ID::TRAIN_ZEALOT)):
+        case(uint32_t(UNIT_TYPEID::PROTOSS_ZEALOT)):
             return UNIT_TYPEID::PROTOSS_ZEALOT;
         default:
             return 0;
@@ -494,6 +509,244 @@ bool checkPlacementFull(Point2D p, int size, Agent *agent) {
         }
     }
     return true;
+}
+
+bool isFlyingTargetType(UnitTypeID unit_type) {
+    switch (uint32_t(unit_type)) {
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ASSIMILATOR)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DARKSHRINE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FLEETBEACON)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FORGE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_GATEWAY)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_NEXUS)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOTONCANNON)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PYLON)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSBAY)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_SHIELDBATTERY)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_STARGATE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ADEPT)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ARCHON)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_CARRIER)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_COLOSSUS)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DARKTEMPLAR)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DISRUPTOR)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_HIGHTEMPLAR)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_IMMORTAL)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_MOTHERSHIP)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_MOTHERSHIPCORE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_OBSERVER)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ORACLE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOENIX)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PROBE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_SENTRY)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_STALKER)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TEMPEST)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_VOIDRAY)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_WARPPRISM)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ZEALOT)):
+            return false;
+        default:
+            printf("ISFLYINGTARGET ERROR\n");
+            return false;
+    }
+    printf("ISFLYINGTARGET ERROR\n");
+    return false;
+}
+
+bool isGroundTargetType(UnitTypeID unit_type) {
+    switch (uint32_t(unit_type)) {
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ASSIMILATOR)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DARKSHRINE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FLEETBEACON)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_FORGE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_GATEWAY)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_NEXUS)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOTONCANNON)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PYLON)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSBAY)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_SHIELDBATTERY)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_STARGATE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TEMPLARARCHIVE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ADEPT)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ARCHON)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_CARRIER)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_COLOSSUS)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DARKTEMPLAR)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_DISRUPTOR)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_HIGHTEMPLAR)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_IMMORTAL)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_MOTHERSHIP)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_MOTHERSHIPCORE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_OBSERVER)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ORACLE)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PHOENIX)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_PROBE)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_SENTRY)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_STALKER)):
+            return true;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_TEMPEST)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_VOIDRAY)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_WARPPRISM)):
+            return false;
+        case (uint32_t(UNIT_TYPEID::PROTOSS_ZEALOT)):
+            return true;
+        default:
+            printf("ISGROUNDTARGET ERROR\n");
+            return false;
+    }
+    printf("ISGROUNDTARGET ERROR\n");
+    return false;
+}
+
+
+bool isFlyingTarget(const Unit* unit) {
+    return unit->unit_type == UNIT_TYPEID::PROTOSS_COLOSSUS || unit->is_flying;
+}
+    
+bool isGroundTarget(const Unit *unit) {
+    return !unit->is_flying;
+}
+
+Composition unitTypeAsTarget(UnitTypeID unit_type) {
+    if (isFlyingTargetType(unit_type)) {
+        if (isGroundTargetType(unit_type)) {
+            Composition::Any;
+        } else {
+            Composition::Air;
+        }
+    } else {
+        if (isGroundTargetType(unit_type)) {
+            Composition::Ground;
+        } else {
+            Composition::Invalid;
+        }
+    }
+    return Composition::Invalid;
+}
+
+Composition unitAsTarget(const Unit *unit) {
+    if (isFlyingTarget(unit)) {
+        if (isGroundTarget(unit)) {
+            return Composition::Any;
+        } else {
+            return Composition::Air;
+        }
+    } else {
+        if (isGroundTarget(unit)) {
+            return Composition::Ground;
+        } else {
+            return Composition::Invalid;
+        }
+    }
+    return Composition::Invalid;
+}
+
+bool hitsUnit(const Unit *target, Composition weapon) {
+    Composition unit_comp = unitAsTarget(target);
+    if (weapon == Composition::Invalid || unit_comp == Composition::Invalid) {
+        printf("HITCHECK ERROR %d %d\n", weapon, unit_comp);
+        return false;
+    }
+    if (weapon == Composition::Any || unit_comp == Composition::Any) {
+        return true;
+    }
+    if ((weapon == Composition::Air && unit_comp == Composition::Air) ||
+        (weapon == Composition::Ground && unit_comp == Composition::Ground)) {
+        return true;
+    }
+    return false;
+}
+
+bool hitsUnit(Composition army, Composition weapon) {
+    if (weapon == Composition::Invalid || army == Composition::Invalid) {
+        printf("HITCHECK ARMY ERROR %d %d\n", weapon, army);
+        return false;
+    }
+    if (weapon == Composition::Any || army == Composition::Any) {
+        return true;
+    }
+    if ((weapon == Composition::Air && army == Composition::Air) ||
+        (weapon == Composition::Ground && army == Composition::Ground)) {
+        return true;
+    }
+    return false;
+}
+
+Point3D addKeepZ(Point3D &a, Point2D &b) {
+    return {a.x + b.x, a.y + b.y, a.z};
 }
 
 }  // namespace Aux

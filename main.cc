@@ -156,6 +156,11 @@ public:
                     c = {123,50,10};
                 } else if (imRef(Aux::influenceMap, w, h) != 0) {
                     c = {44, 50, 210};
+                } else if (imRef(Aux::influenceMapEnemy, w, h) != 0) {
+                    c = {
+                        210,
+                        50, 44
+                    };
                 }
 
                 if (0 || !(c.r == 255 && c.g == 255 && c.b == 255) || boxHeight != 0) {
@@ -318,9 +323,12 @@ public:
 
     //! Called when a game is started or restarted.
     virtual void OnGameStart() final {
+        profilerPrint = false;
         last_time = clock();
         Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
         Aux::influenceMap = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
+        Aux::influenceMapEnemy =
+            new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
         path_zhang_suen = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
 
         for (int i = 0; i < path_zhang_suen->width(); i++) {
@@ -345,7 +353,7 @@ public:
                     }
                 }
             } else {
-                printf("NEUTRAL:%s\n", UnitTypeToName(unit->unit_type));
+                //printf("NEUTRAL:%s\n", UnitTypeToName(unit->unit_type));
                 Aux::addPlacement(unit->pos, unit->unit_type);
             }
         }
@@ -414,8 +422,10 @@ public:
         squads.emplace_back();
         squads[0].defend(rally_point);
 
-        //Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
-        //Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
+        Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
+        Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
+        Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_ADEPT, Observation()->GetGameInfo().enemy_start_locations[0], 2,
+                                 2);
     }
 
     //! Called when a game has ended.
@@ -465,25 +475,45 @@ public:
     //! Called whenever one of the player's units has been destroyed.
     //!< \param unit The destroyed unit.
     virtual void OnUnitDestroyed(const Unit* unit) {
-        UnitWrapper* u = UnitManager::find(unit->unit_type, unit->tag);
-        delete u;
-        Aux::removePlacement(unit->pos, unit->unit_type);
-        if (unit->is_building) {
+        if (unit->alliance == Unit::Alliance::Self) {
+            UnitWrapper* u = UnitManager::find(unit->unit_type, unit->tag);
+            delete u;
             Aux::removePlacement(unit->pos, unit->unit_type);
-            UnitTypes allData = Observation()->GetUnitTypeData();
-            UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(unit->unit_type));
-            GameInfo game_info = Observation()->GetGameInfo();
+            if (unit->is_building) {
+                Aux::removePlacement(unit->pos, unit->unit_type);
+                UnitTypes allData = Observation()->GetUnitTypeData();
+                UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(unit->unit_type));
+                GameInfo game_info = Observation()->GetGameInfo();
 
-            for (int i = std::max(0, int(unit->pos.x - unit_stats.sight_range) - 2);
-                 i < std::min(game_info.width, int(unit->pos.x + unit_stats.sight_range) + 2); i++) {
-                for (int j = std::max(0, int(unit->pos.y - unit_stats.sight_range) - 2);
-                     j < std::min(game_info.height, int(unit->pos.y + unit_stats.sight_range) + 2); j++) {
-                    if (Distance2D(Point2D{i + 0.5F, j + 0.5F}, unit->pos) < unit_stats.sight_range) {
-                        imRef(Aux::influenceMap, i, j) -= 1;
+                for (int i = std::max(0, int(unit->pos.x - unit_stats.sight_range) - 2);
+                     i < std::min(game_info.width, int(unit->pos.x + unit_stats.sight_range) + 2); i++) {
+                    for (int j = std::max(0, int(unit->pos.y - unit_stats.sight_range) - 2);
+                         j < std::min(game_info.height, int(unit->pos.y + unit_stats.sight_range) + 2); j++) {
+                        if (Distance2D(Point2D{i + 0.5F, j + 0.5F}, unit->pos) < unit_stats.sight_range) {
+                            imRef(Aux::influenceMap, i, j) -= 1;
+                        }
+                    }
+                }
+            }
+        } else {
+            if (unit->is_building) {
+                Aux::removePlacement(unit->pos, unit->unit_type);
+                UnitTypes allData = Observation()->GetUnitTypeData();
+                UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(unit->unit_type));
+                GameInfo game_info = Observation()->GetGameInfo();
+
+                for (int i = std::max(0, int(unit->pos.x - unit_stats.sight_range) - 2);
+                     i < std::min(game_info.width, int(unit->pos.x + unit_stats.sight_range) + 2); i++) {
+                    for (int j = std::max(0, int(unit->pos.y - unit_stats.sight_range) - 2);
+                         j < std::min(game_info.height, int(unit->pos.y + unit_stats.sight_range) + 2); j++) {
+                        if (Distance2D(Point2D{i + 0.5F, j + 0.5F}, unit->pos) < unit_stats.sight_range) {
+                            imRef(Aux::influenceMapEnemy, i, j) -= 1;
+                        }
                     }
                 }
             }
         }
+        
     }
 
     //! Called when a unit becomes idle, this will only occur as an event so will only be called when the unit becomes
@@ -586,13 +616,13 @@ public:
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1,-1});
             Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
                                Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
-            Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
             Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, {-1, -1});
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
             Macro::addAction(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE);
+            Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
             Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
                                Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
             Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
             Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
             Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
             Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSFACILITY, {-1, -1});
@@ -635,7 +665,11 @@ public:
             }
         }
         if (spareMinerals > 150 && spareVespene > 75) {
-            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+            if (squads[0].has(UNIT_TYPEID::PROTOSS_WARPPRISM)) {
+                Macro::addAction(UNIT_TYPEID::PROTOSS_WARPPRISM, ABILITY_ID::MORPH_WARPPRISMPHASINGMODE);
+            }
+
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER, squads[0].centerGND(this));
         }
 
         clock_t new_time = clock();
@@ -697,6 +731,23 @@ public:
         UnitWrapper* u = new UnitWrapper(unit);
         u->execute(this);
         Aux::addPlacement(unit->pos, unit->unit_type);
+
+        if (unit->is_building) {
+            Aux::addPlacement(unit->pos, unit->unit_type);
+            UnitTypes allData = Observation()->GetUnitTypeData();
+            UnitTypeData unit_stats = allData.at(static_cast<uint32_t>(unit->unit_type));
+            GameInfo game_info = Observation()->GetGameInfo();
+
+            for (int i = std::max(0, int(unit->pos.x - unit_stats.sight_range) - 2);
+                 i < std::min(game_info.width, int(unit->pos.x + unit_stats.sight_range) + 2); i++) {
+                for (int j = std::max(0, int(unit->pos.y - unit_stats.sight_range) - 2);
+                     j < std::min(game_info.height, int(unit->pos.y + unit_stats.sight_range) + 2); j++) {
+                    if (Distance2D(Point2D{i + 0.5F, j + 0.5F}, unit->pos) < unit_stats.sight_range) {
+                        imRef(Aux::influenceMapEnemy, i, j) += 1;
+                    }
+                }
+            }
+        }
     }
 };
 
