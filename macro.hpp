@@ -194,7 +194,7 @@ namespace Macro {
             }
 
             if (units.size() == 0) {
-                diagnostics += "NO AVAILABLE UNITS\n\n";
+                diagnostics += "NO FREE UNITS\n\n";
                 //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
                 continue;
             }
@@ -276,9 +276,9 @@ namespace Macro {
             for (int i = 0; i < probes.size(); i ++) {
                 vector<Building> buildings = ((Probe *)probes[i])->buildings;
                 for (int b = 0; b < buildings.size(); b++) {
-                    Cost c = buildings[b].cost(agent);
-                    theoreticalMinerals -= c.minerals;
-                    theoreticalVespene -= c.vespene;
+                    Cost g = buildings[b].cost(agent);
+                    theoreticalMinerals -= g.minerals;
+                    theoreticalVespene -= g.vespene;
                 }
             }
 
@@ -412,6 +412,10 @@ namespace Macro {
                 theoreticalMinerals += (dt * Aux::MINERALS_PER_PROBE_PER_SEC * numMineralMiners);
                 theoreticalVespene += (dt * Aux::VESPENE_PER_PROBE_PER_SEC * numVespeneMiners);
             } else {
+                if (theoreticalMinerals < int(c.minerals) || theoreticalVespene < int(c.vespene)) {
+                    diagnostics += "NOT ENOUGH RESOURCES\n\n";
+                    break;
+                }
                 auto abil = agent->Query()->GetAbilitiesForUnits(units);
                 for (int i = 0; i < units.size(); i++) {
                     for (int a = 0; a < abil[i].abilities.size(); a ++) {
@@ -421,7 +425,9 @@ namespace Macro {
                     }
                 }
                 if (actionUnit == nullptr) {
-                    diagnostics += "NO AVAILABLE UNIT\n\n";
+                    diagnostics += "NO UNIT WITH RELEVANT ABILITY";
+                    diagnostics += strprintf(" %d/%d %d/%d\n\n", theoreticalMinerals, int(c.minerals),
+                                             theoreticalVespene, int(c.vespene));
                     continue;
                 }
 

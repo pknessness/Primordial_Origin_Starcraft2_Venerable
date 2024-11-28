@@ -302,6 +302,22 @@ public:
         }
     }
 
+    void enemiesDisplay() {
+        for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
+            auto all = it->second;
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                string tot = strprintf("%s", UnitTypeToName((*it2)->type));
+                Debug()->DebugTextOut(tot, (*it2)->pos3D(this), {255, 40, 10}, 8);
+                float radius = Aux::structureDiameter((*it2)->type);
+                if (radius == 0) {
+                    radius = 0.5;
+                }
+                Debug()->DebugSphereOut((*it2)->pos3D(this), radius, {255, 40, 10});
+            }
+        }
+        
+    }
+
     void expansionsLoc() {
         for (int i = 0; i < rankedExpansions.size(); i++) {
             Point3D p = P3D(rankedExpansions[i]);
@@ -422,10 +438,9 @@ public:
         squads.emplace_back();
         squads[0].defend(rally_point);
 
-        Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
-        Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
-        Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_ADEPT, Observation()->GetGameInfo().enemy_start_locations[0], 2,
-                                 2);
+        //Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
+        //Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
+        //Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_ADEPT, Observation()->GetGameInfo().enemy_start_locations[0], 2, 2);
     }
 
     //! Called when a game has ended.
@@ -478,7 +493,6 @@ public:
         if (unit->alliance == Unit::Alliance::Self) {
             UnitWrapper* u = UnitManager::find(unit->unit_type, unit->tag);
             delete u;
-            Aux::removePlacement(unit->pos, unit->unit_type);
             if (unit->is_building) {
                 Aux::removePlacement(unit->pos, unit->unit_type);
                 UnitTypes allData = Observation()->GetUnitTypeData();
@@ -495,7 +509,9 @@ public:
                     }
                 }
             }
-        } else {
+        } else if(unit->alliance == Unit::Alliance::Enemy) {
+            UnitWrapper* u = UnitManager::findEnemy(unit->unit_type, unit->tag);
+            delete u;
             if (unit->is_building) {
                 Aux::removePlacement(unit->pos, unit->unit_type);
                 UnitTypes allData = Observation()->GetUnitTypeData();
@@ -688,6 +704,7 @@ public:
         orderDisplay();
         tagDisplay();
         buildingDisplay();
+        enemiesDisplay();
         Debug()->SendDebug();
     }
 
@@ -756,10 +773,11 @@ int main(int argc, char* argv[]) {
     coordinator.LoadSettings(argc, argv);
 
     Bot bot;
+    Difficulty diff = Difficulty::Medium;
     if (std::rand() % 2 == 1) {
-        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(Race::Random)});
+        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(Race::Random, diff)});
     } else {
-        coordinator.SetParticipants({CreateComputer(Race::Random), CreateParticipant(Race::Protoss, &bot)});
+        coordinator.SetParticipants({CreateComputer(Race::Random, diff), CreateParticipant(Race::Protoss, &bot)});
     }
 
     coordinator.LaunchStarcraft();

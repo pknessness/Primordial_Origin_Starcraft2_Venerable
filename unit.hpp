@@ -8,7 +8,7 @@ class UnitWrapper {
 public:
     Tag self;
     UnitTypeID type;
-    Point2D lastPos;
+    Point3D lastPos;
 
     //UnitWrapper(Tag self_);
 
@@ -140,7 +140,7 @@ UnitWrapper::UnitWrapper(Tag self_, UnitTypeID type_)
     UnitManager::units[type].push_back(this);
 }
 
-UnitWrapper::UnitWrapper(const Unit *unit) : self(unit->tag), type(unit->unit_type), lastPos{0, 0} {
+UnitWrapper::UnitWrapper(const Unit *unit) : self(unit->tag), type(unit->unit_type), lastPos{0, 0, 0} {
     if (unit->alliance == Unit::Alliance::Self) {
         if (!UnitManager::checkExist(type)) {
             UnitManager::units[type] = vector<UnitWrapper *>();
@@ -170,9 +170,9 @@ Point2D UnitWrapper::pos(Agent *agent) {
 Point3D UnitWrapper::pos3D(Agent *agent) {
     const Unit *unit = agent->Observation()->GetUnit(self);
     if (unit != nullptr) {
-        return unit->pos;
+        lastPos = unit->pos;
     }
-    return {0,0,0};
+    return lastPos;
 }
 
 inline bool UnitWrapper::exists(Agent *agent) {

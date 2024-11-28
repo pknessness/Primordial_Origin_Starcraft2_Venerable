@@ -7,6 +7,8 @@
 #include "profiler.hpp"
 #include "unit.hpp"
 
+constexpr int BERTH = 1;
+
 enum SquadMode {
     ATTACK,
     RETREAT,
@@ -165,29 +167,40 @@ public:
         }
     }
 
-    float priorityAttack(UnitTypeID self_type, Weapon weapon, const Unit *opponent, UnitTypeData enemyStats, Agent *agent) {  // HIGHER IS MORE DESIRABLE TO ATTACK
+    float priorityAttack(UnitTypeID self_type, Weapon weapon, const Unit *opponent, Agent *agent) {  // HIGHER IS MORE DESIRABLE TO ATTACK
         auto *padad = new Profiler("pA_o");
         //UnitTypes allData = Aux::allData(agent);
         //UnitTypeData myStats = allData.at(static_cast<uint32_t>(self_type));
         //UnitTypeData enemyStats = allData.at(static_cast<uint32_t>(opponent->unit_type));
+        UnitTypeData myStats = Aux::getStats(self_type, agent);
+        UnitTypeData enemyStats = Aux::getStats(opponent->unit_type, agent);
         Weapon strongestWeapon;
+        float mostDmag = 0;
         delete padad;
         auto *pe = new Profiler("pA_eW");
         for (int i = 0; i < enemyStats.weapons.size(); i++) {
             if (Aux::hitsUnit(composition(agent), enemyStats.weapons[i].type)) {
-                if ((strongestWeapon.damage_ / strongestWeapon.speed) <
-                    (enemyStats.weapons[i].damage_ / enemyStats.weapons[i].speed)) {
+                float damageE = enemyStats.weapons[i].damage_;
+                for (int w = 0; w < enemyStats.weapons[i].damage_bonus.size(); w++) {
+                    for (int a = 0; a < myStats.attributes.size(); a++) {
+                        if (enemyStats.weapons[i].damage_bonus[w].attribute == myStats.attributes[a]) {
+                            damageE += enemyStats.weapons[i].damage_bonus[w].bonus;
+                        }
+                    }
+                }
+                if ((mostDmag / strongestWeapon.speed) < (damageE / enemyStats.weapons[i].speed)) {
                     strongestWeapon = enemyStats.weapons[i];
+                    mostDmag = damageE;
                 }
             }
         }
         delete pe;
         auto pe2ads = Profiler("pA_mD");
         float damage = weapon.damage_;
-        for (int i = 0; i < weapon.damage_bonus.size(); i++) {
+        for (int w = 0; w < weapon.damage_bonus.size(); w++) {
             for (int a = 0; a < enemyStats.attributes.size(); a++) {
-                if (weapon.damage_bonus[i].attribute == enemyStats.attributes[a]) {
-                    damage += weapon.damage_bonus[i].bonus;
+                if (weapon.damage_bonus[w].attribute == enemyStats.attributes[a]) {
+                    damage += weapon.damage_bonus[w].bonus;
                 }
             }
         }
@@ -256,6 +269,11 @@ public:
                     squadStates[wrap->self] = 'n';
                 }
 
+                int berthRadius = BERTH;
+                if (squadStates[wrap->self] == 'r') {
+                    berthRadius += 4;
+                }
+
                 //all.push_back(wrap->self);
                 if (enemies.size() == 0) {
                     move.push_back(wrap->self);
@@ -273,7 +291,7 @@ public:
                         for (int i = 0; i < enemy_stats.weapons.size(); i++) {
                             auto pre = Profiler("sE_pEW");
                             bool withinRange = ((Distance2D(wrapGet->pos, enemies[e]->pos) - wrapGet->radius -
-                                                 enemies[e]->radius) < enemy_stats.weapons[i].range);
+                                                 enemies[e]->radius) < enemy_stats.weapons[i].range + berthRadius);
                             if (withinRange && Aux::hitsUnit(wrapGet, enemy_stats.weapons[i].type)) {
                                 // inRange.push_back(enemies[e]);
                                 bool inserted = false;
@@ -285,14 +303,6 @@ public:
                                     // printf("%s %d\n", AbilityTypeToName(currentAction.ability),
                                     // currentAction.index);
                                 }
-                                //for (auto it2 = dangerous.begin(); it2 != dangerous.end(); it2++) {
-                                //    if (priorityAvoid(wrap->type, *it2, enemy_stats.weapons[i], agent) <
-                                //        priorityAvoid(wrap->type, enemies[e], enemy_stats.weapons[i], agent)) {
-                                //        dangerous.insert(it2, enemies[e]);
-                                //        inserted = true;
-                                //        break;
-                                //    }
-                                //}
                                 for (int d = 0; d < dangerous.size(); d++) {
                                     if (dangerousPriority[d] < priority) {
                                         dangerous.insert(dangerous.begin() + d, enemies[e]);
@@ -319,8 +329,7 @@ public:
                                     //inRange.push_back(enemies[e]);
                                     auto *pdd = new Profiler("sE_pMW_I");
                                     bool inserted = false;
-                                    float priority = priorityAttack(wrap->type, unit_stats.weapons[i], enemies[e],
-                                                                    enemy_stats, agent);
+                                    float priority = priorityAttack(wrap->type, unit_stats.weapons[i], enemies[e], agent);
                                     delete pdd;
                                     auto *pddads32 = new Profiler("sE_pMW_I1");
                                     if (inRange.size() == 0) {
@@ -330,18 +339,7 @@ public:
                                         // printf("%s %d\n", AbilityTypeToName(currentAction.ability), currentAction.index);
                                     }
                                     delete pddads32;
-                                    auto *pddads31 = new Profiler("sE_pMW_I1");
-                                    for (auto it2 = inRange.begin(); it2 != inRange.end(); it2++) {
-                                        if (priorityAttack(wrap->type, unit_stats.weapons[i], *it2, enemy_stats, agent) < priorityAttack(wrap->type, unit_stats.weapons[i],
-                                                                                   enemies[e], enemy_stats, agent)) {
-                                            inRange.insert(it2, enemies[e]);
-                                            inRangePriority.push_back(priority);
-                                            inserted = true;
-                                            break;
-                                        }
-                                    }
-                                    delete pddads31;
-                                    auto *pddads33 = new Profiler("sE_pMW_I1");
+                                    auto *pddads33 = new Profiler("sE_pMW_I2");
                                     for (int d = 0; d < inRange.size(); d++) {
                                         if (inRangePriority[d] < priority) {
                                             inRange.insert(inRange.begin() + d, enemies[e]);
@@ -351,7 +349,7 @@ public:
                                         }
                                     }
                                     delete pddads33;
-                                    auto *pddad4s = new Profiler("sE_pMW_I1");
+                                    auto *pddad4s = new Profiler("sE_pMW_I3");
                                     if (inserted == false) {
                                         inRange.push_back(enemies[e]);
                                         inRangePriority.push_back(priority);
