@@ -774,7 +774,7 @@ int main(int argc, char* argv[]) {
     coordinator.LoadSettings(argc, argv);
 
     Bot bot;
-    Difficulty diff = Difficulty::Medium;
+    Difficulty diff = Difficulty::Hard;
     Race race = Race::Terran;
     if (std::rand() % 2 == 1) {
         coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
