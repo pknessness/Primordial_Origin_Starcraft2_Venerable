@@ -170,9 +170,9 @@ public:
 
                     Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
                                          Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
-                    //Debug()->DebugTextOut(strprintf("%d, %d", w, h),
-                    //                      Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
-                    //                      Color(200, 90, 15), fontSize);
+                    Debug()->DebugTextOut(strprintf("%d, %d", w, h),
+                                          Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
+                                          Color(200, 90, 15), 4);
                     /*std::string cs = imRef(display, w, h);
                     float disp = cs.length() * 0.0667 * fontSize / 15;
                     Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1 + displace),
@@ -337,9 +337,44 @@ public:
         }
     }
 
+    void manageArmy() {
+        EnemySquads danger = checkDangerAtHome();
+        if (danger.size() == 0) {
+            if (squads[0].army.size() == 6) {
+                squads[0].attack(Observation()->GetGameInfo().enemy_start_locations[0]);
+            }
+        } else {
+            squads[0].attack(danger[0].center);
+        }
+    }
+
+    EnemySquads checkDangerAtHome() {
+        //UnitWrappers danger = UnitWrappers();
+        EnemySquads danger = EnemySquads();
+        for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
+            auto all = it->second;
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                Point2D pos = (*it2)->pos(this);
+                if (pos == Point2D{0, 0}) {
+                    continue;
+                }
+                if (imRef(Aux::influenceMap, int(pos.x), int(pos.y)) != 0) {
+                    //danger.push_back((*it2));
+                    for (int i = 0; i < danger.size(); i++) {
+                        if (Distance2D(danger[i].center, pos) < ENEMY_SQUAD_RADIUS) {
+                            danger[i].add(*it2, this);
+                        }
+                    }
+                }
+            }
+        }
+        return danger;
+    }
+
     //! Called when a game is started or restarted.
     virtual void OnGameStart() final {
-        profilerPrint = false;
+        //profilerPrint = false;
+        profilerThreshold = 10;
         last_time = clock();
         Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
         Aux::influenceMap = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
@@ -392,12 +427,12 @@ public:
         //unordered_set<Location> walls{{5, 0}, {5, 1}, {2, 2}, {5, 2}, {2, 3}, {5, 3}, {2, 4}, {5, 4},
         //                              {2, 5}, {4, 5}, {5, 5}, {6, 5}, {7, 5}, {2, 6}, {2, 7}};
 
-        Point2DI start{142, 45};
-        Point2DI goal{130, 60};
+        //Point2DI start{142, 45};
+        //Point2DI goal{130, 60};
 
-        auto came_from = jps(gridmap, start, goal, Tool::euclidean, this);
-        auto pat = Tool::reconstruct_path(start, goal, came_from);
-        path = fullPath(pat);
+        //auto came_from = jps(gridmap, start, goal, Tool::euclidean, this);
+        //auto pat = Tool::reconstruct_path(start, goal, came_from);
+        //path = fullPath(pat);
         /*for (auto loc : path) {
             printf("%d,%d\n", loc.x, loc.y);
         }*/
@@ -458,7 +493,13 @@ public:
             Probe *u = new Probe(unit);
             u->execute(this);
         } else if (!unit->is_building) {
-            ArmyUnit* u = new ArmyUnit(unit);
+            if (unit->unit_type == UNIT_TYPEID::PROTOSS_STALKER) {
+                new Stalker(unit);
+            } else if (unit->unit_type == UNIT_TYPEID::PROTOSS_OBSERVER) {
+                new ObserverEye(unit);
+            } else {
+                new ArmyUnit(unit);
+            }
         } else{
             //UnitWrapper* u = new UnitWrapper(unit->tag, unit->unit_type);
             //u->execute(this);
@@ -556,17 +597,29 @@ public:
             probe->execute(this);
         }
 
+        manageArmy();
+
         string s = "";
         for (int i = 0; i < squads.size(); i ++) {
             squads[i].execute(this);
-            s += strprintf("SQUAD%d %s %.1f,%.1f R[%.1f]:\n", i, SquadModeToString(squads[i].mode),
-                           squads[i].location.x, squads[i].location.y, squads[i].armyballRadius());
+            s += strprintf("SQUAD%d %s %.1f,%.1f int[%.1f,%.1f]:\n", i, SquadModeToString(squads[i].mode),
+                           squads[i].location.x, squads[i].location.y, squads[i].intermediateLoc.x,
+                           squads[i].intermediateLoc.y);
+            Point2D c = squads[i].center(this);
+            Point2D cg = squads[i].center(this);
+            s += strprintf("C:%.1f,%.1f CG:%.1f,%.1f\n", c.x,c.y, cg.x,cg.y);
             for (int a = 0; a < squads[i].army.size(); a++) {
                 squads[i].army[a]->execute(this);
-                s += strprintf("%s %.1fs\n", UnitTypeToName(squads[i].army[a]->type), squads[i].army[a]->get(this)->weapon_cooldown);
+                s += strprintf("%s %.1fs %c\n", UnitTypeToName(squads[i].army[a]->type),
+                               squads[i].army[a]->get(this)->weapon_cooldown,
+                               squads[i].squadStates[squads[i].army[a]->self]);
+                Debug()->DebugTextOut(strprintf("%c", squads[i].squadStates[squads[i].army[a]->self]),
+                                      squads[i].army[a]->pos(this) + Point3D{s.size() * LETTER_DISP, 0.3, 0.5},
+                                      Color(210, 55, 55), 8);
             }
             s += '\n';
             Debug()->DebugSphereOut(P3D(squads[i].center(this)), squads[i].armyballRadius());
+            Debug()->DebugSphereOut(P3D(squads[i].intermediateLoc), 0.5, {30,230, 210});
         }
         Debug()->DebugTextOut(s, Point2D(0.71, 0.11), Color(1, 42, 212), 8);
 
@@ -682,11 +735,10 @@ public:
             }
         }
         if (spareMinerals > 150 && spareVespene > 75) {
-            if (squads[0].has(UNIT_TYPEID::PROTOSS_WARPPRISM)) {
-                Macro::addAction(UNIT_TYPEID::PROTOSS_WARPPRISM, ABILITY_ID::MORPH_WARPPRISMPHASINGMODE);
-            }
-
-            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER, squads[0].centerGND(this));
+            //if (squads[0].has(UNIT_TYPEID::PROTOSS_WARPPRISM)) {
+            //    Macro::addAction(UNIT_TYPEID::PROTOSS_WARPPRISM, ABILITY_ID::MORPH_WARPPRISMPHASINGMODE);
+            //}
+            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER, squads[0].center(this));
         }
 
         clock_t new_time = clock();
@@ -703,7 +755,7 @@ public:
         listMacroActions();
         probeLines();
         orderDisplay();
-        tagDisplay();
+        //tagDisplay();
         buildingDisplay();
         enemiesDisplay();
         Debug()->SendDebug();
@@ -770,17 +822,14 @@ public:
 };
 
 int main(int argc, char* argv[]) {
+    srand(clock());
     Coordinator coordinator;
     coordinator.LoadSettings(argc, argv);
 
     Bot bot;
-    Difficulty diff = Difficulty::Hard;
-    Race race = Race::Terran;
-    if (std::rand() % 2 == 1) {
-        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
-    } else {
-        coordinator.SetParticipants({CreateComputer(race, diff), CreateParticipant(Race::Protoss, &bot)});
-    }
+    Difficulty diff = Difficulty::Medium;
+    Race race = (Race)(std::rand() % 4);  // Race::Random;
+    coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
 
     coordinator.LaunchStarcraft();
     std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map",  "5_13/Equilibrium513AIE.SC2Map",
@@ -796,23 +845,34 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
+//fully optimize
+
+//weapon net, 8x precision
+
+//tag on units that defines whether they are being individual controlled or group-controlled
+
+//minute micro
+
+//predictive theoretical health stutter step when no blink
+
+//make sure all units are engaging in fight
+//add ramp analysis
+
 //add check for no possible units that can execute an action at all
 
 //have nexus stop checking when it has two vespenes
-//fix probe targetting
 //fix probe build-check
-//better probe queue
+
 //fix assimilator condition
-//have both 
+
 //add generator to global variables
+
 //if near supply cap, save for pylon
-//add place-able check to actionQueue
+
 //build list
+
 //army list
+
 //per-unit micro
+
 //squadrons
-//combine rankedExpansions into normal expansionDistance generation
-
-
-//ERROR CODES:
-//ABILITY CODES ARE 0x01__

@@ -200,7 +200,10 @@ public:
                 }
                 buildings.erase(buildings.begin());
             } else {
-                agent->Actions()->UnitCommand(self, ABILITY_ID::MOVE_MOVE, top.pos);
+                const Unit *prob = get(agent);
+                if (prob->orders.size() == 0 || prob->orders.front().target_pos != top.pos) {
+                    agent->Actions()->UnitCommand(self, ABILITY_ID::MOVE_MOVE, top.pos);
+                }
             }
         }
         return true;

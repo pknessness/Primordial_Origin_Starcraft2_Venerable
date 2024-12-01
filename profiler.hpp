@@ -4,6 +4,7 @@
 using namespace std;
 
 bool profilerPrint = true;
+int profilerThreshold = 0;
 
 class Profiler {
 public:
@@ -17,7 +18,7 @@ public:
 
     ~Profiler() {
         clock_t now = clock();
-        if (profilerPrint) {
+        if (profilerPrint && (now - start_time > profilerThreshold)) {
             printf("<%s - %lums>\n", name.c_str(), now - start_time);
         }
     }
