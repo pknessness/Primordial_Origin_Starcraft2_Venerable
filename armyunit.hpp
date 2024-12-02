@@ -47,7 +47,7 @@ public:
     std::map<Tag, char> squadStates;
 
     float radius;
-    int8_t ignoreFrames = 0;
+    int8_t ignoreFrames;
 
     std::vector<UnitWrapper *> army;
 
@@ -56,6 +56,7 @@ public:
         radius = 0;
         comp = Composition::Invalid;
         squadStates = std::map<Tag, char>();
+        ignoreFrames = 0;
     }
 
     bool has(UnitTypeID type) {
@@ -83,12 +84,12 @@ public:
                 (Distance2D(location, wrap->pos(agent)) < Distance2D(location, closest->pos(agent)))) {
                 closest = wrap;
             }
-            printf("dp %.1f, dc %.1f\n", Distance2D(location, wrap->pos(agent)),
-                   Distance2D(location, closest->pos(agent)));
+            //printf("dp %.1f, dc %.1f\n", Distance2D(location, wrap->pos(agent)),
+            //       Distance2D(location, closest->pos(agent)));
         }
         if (closest != nullptr) {
             squadStates[closest->self] = 'n';
-            printf("ASSIGN %Ix TO CENTER\n", closest->self);
+            //printf("ASSIGN %Ix TO CENTER\n", closest->self);
         }
     }
 
@@ -276,6 +277,14 @@ public:
                 ignoreFrames--;
                 return false;
             }
+
+            //Tags rmy = Tags();
+            //for (auto wrap : army) {
+            //    rmy.push_back(wrap->self);
+            //}
+            //agent->Actions()->UnitCommand(rmy, ABILITY_ID::ATTACK, location);
+            //ignoreFrames = 10;
+            
             UnitTypes allData = agent->Observation()->GetUnitTypeData();
             Units enemies = agent->Observation()->GetUnits(Unit::Alliance::Enemy);
             //std::vector<DamageNet> enemiesnet;
@@ -289,6 +298,7 @@ public:
             //    }
             //}
             Tags move;
+            Tags join;
             //Tags all;
             //Tags atk;
             //Tag attackTarget;
@@ -308,8 +318,8 @@ public:
                 //if (squadStates.find(wrap->self) == squadStates.end()) {
                 //    squadStates[wrap->self] = 'o';
                 //}
-                if (squadStates[wrap->self] == 'o' || squadStates[wrap->self] == 'm') {
-                    move.push_back(wrap->self);
+                if (squadStates[wrap->self] == 'm') {
+                    //join.push_back(wrap->self);
                     continue;
                 }
                 numArmyInArea += 1;
@@ -327,7 +337,11 @@ public:
 
                 //all.push_back(wrap->self);
                 if (enemies.size() == 0) {
-                    move.push_back(wrap->self);
+                    if (squadStates[wrap->self] == 'o') {
+                        join.push_back(wrap->self);
+                    } else {
+                        move.push_back(wrap->self);
+                    }
                 } else {
 
                     UnitTypeData unit_stats = Aux::getStats(wrap->type, agent);  // allData.at(static_cast<uint32_t>(wrap->type));
@@ -445,7 +459,11 @@ public:
                             }
                             attacking[inRange.front()->self].push_back(wrap->self);
                         } else {
-                            move.push_back(wrap->self);
+                            if (squadStates[wrap->self] == 'o') {
+                                join.push_back(wrap->self);
+                            } else {
+                                move.push_back(wrap->self);
+                            }
                         }
                     } else {
                         if (inRange.size() != 0) {
@@ -460,7 +478,11 @@ public:
                             }
                             avoiding[dangerous.front()->self].push_back(wrap->self);
                         } else {
-                            move.push_back(wrap->self);
+                            if (squadStates[wrap->self] == 'o') {
+                                join.push_back(wrap->self);
+                            } else {
+                                move.push_back(wrap->self);
+                            }
                         }
                     }
                     //for (int i = 0; i < enemiesnet.size(); i++) {
@@ -482,9 +504,9 @@ public:
             //printf("[%.1f,%.1f]", intermediateLoc.x, intermediateLoc.y);
 
             if (numArmyEngaged < army.size() * 0.9 && intermediateLoc != Point2D{0,0}) {
-                agent->Actions()->UnitCommand(move, ABILITY_ID::MOVE_MOVE, intermediateLoc);
+                agent->Actions()->UnitCommand(move, ABILITY_ID::ATTACK, intermediateLoc);
             } else {
-                agent->Actions()->UnitCommand(move, ABILITY_ID::MOVE_MOVE, location);
+                agent->Actions()->UnitCommand(move, ABILITY_ID::ATTACK, location);
             }
             for (auto it = avoiding.begin(); it != avoiding.end(); it++) {
                 Point3D avg = {0, 0, 0};
@@ -502,8 +524,8 @@ public:
                 agent->Actions()->UnitCommand(it->second, ABILITY_ID::ATTACK, it->first);
                 
             }
+            agent->Actions()->UnitCommand(join, ABILITY_ID::ATTACK, center(agent));
             ignoreFrames = 3;
-            agent->Debug()->SendDebug();
             return false;
         } else if (mode == RETREAT) {
             return false;
@@ -546,6 +568,7 @@ class EnemySquad {
 public:
     UnitWrappers army;
     Point2D center;
+    std::vector<UnitTypeID> unitComp;
 
     EnemySquad() : army(), center(){
         
@@ -554,10 +577,14 @@ public:
     void add(UnitWrapper *unitWrap, Agent *agent) {
         army.push_back(unitWrap);
         Point2D pos = unitWrap->pos(agent);
-        if (army.size() == 0) {
+        if (army.size() == 1) {
             center = pos;
         } else {
             center += (center * army.size() + pos) / (army.size() + 1);
+        }
+
+        if (std::find(unitComp.begin(), unitComp.end(), unitWrap->type) == unitComp.end()) {
+            unitComp.push_back(unitWrap->type);
         }
     }
 };
@@ -574,7 +601,6 @@ private:
 
 public:
 
-    int8_t ignoreFrames = 0;
     Squad* squad;
 
     ArmyUnit(const Unit* unit) : UnitWrapper(unit) {
@@ -635,6 +661,11 @@ public:
         return false;
     }
 
+    virtual bool executeDamaged(Agent *agent, float health, float shields) {
+        Units enemies = agent->Observation()->GetUnits(Unit::Alliance::Enemy);
+        return false;
+    }
+
     virtual ~ArmyUnit() {
         squad->comp = Composition::Invalid;
         for (auto it = squad->army.begin(); it != squad->army.end(); it++) {
@@ -654,49 +685,48 @@ public:
     }
 
     virtual bool executeAttack(Agent *agent) {
-        if (ignoreFrames > 0) {
-            ignoreFrames--;
-            return false;
-        }
-        UnitTypes allData = agent->Observation()->GetUnitTypeData();
-        //Units enemies = agent->Observation()->GetUnits(Unit::Alliance::Enemy);
-        std::vector<DamageNet> enemiesnet;
-        Point2D displace;
-        Point2D stutterDisplace;
-        int numStutterAvg = 0;
-        for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
-            auto all = it->second;
-            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
-                UnitTypeData enemy_stats = allData.at(static_cast<uint32_t>((*it2)->type));
-                if (enemy_stats.weapons.size() == 0) {
-                    continue;
-                }
-                float distance = Distance2D((*it2)->pos(agent), pos(agent));
-                bool withinEnemyRadius = false;
-                float r1r2 = (*it2)->radius + get(agent)->radius;
-                for (int i = 0; i < enemy_stats.weapons.size(); i++) {
-                    float r = enemy_stats.weapons[i].range + r1r2;
-                    if ((distance < r) &&
-                        (enemy_stats.weapons[i].type == Weapon::TargetType::Any ||
-                         (enemy_stats.weapons[i].type == Weapon::TargetType::Ground && !get(agent)->is_flying) ||
-                         (enemy_stats.weapons[i].type == Weapon::TargetType::Air && get(agent)->is_flying))) {
-                        // enemy_radius = enemy_stats.weapons[i].range;
-                        withinEnemyRadius = true;
-                        displace += normalize(pos(agent) - (*it2)->pos(agent)) * (r - distance);
+        return false;
+    }
+
+    virtual bool executeDamaged(Agent *agent, float health, float shields) {
+        if (shields < 0.05) {
+            // Units enemies = agent->Observation()->GetUnits(Unit::Alliance::Enemy);
+            std::vector<DamageNet> enemiesnet;
+            Point2D displace;
+            Point2D stutterDisplace;
+            int numStutterAvg = 0;
+            for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
+                auto all = it->second;
+                for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                    UnitTypeData enemy_stats = Aux::getStats((*it2)->type, agent);
+                    if (enemy_stats.weapons.size() == 0) {
+                        continue;
+                    }
+                    float distance = Distance2D((*it2)->pos(agent), pos(agent));
+                    bool withinEnemyRadius = false;
+                    float r1r2 = (*it2)->radius + get(agent)->radius;
+                    for (int i = 0; i < enemy_stats.weapons.size(); i++) {
+                        float r = enemy_stats.weapons[i].range + r1r2;
+                        if ((distance < r) &&
+                            (enemy_stats.weapons[i].type == Weapon::TargetType::Any ||
+                             (enemy_stats.weapons[i].type == Weapon::TargetType::Ground && !get(agent)->is_flying) ||
+                             (enemy_stats.weapons[i].type == Weapon::TargetType::Air && get(agent)->is_flying))) {
+                            // enemy_radius = enemy_stats.weapons[i].range;
+                            withinEnemyRadius = true;
+                            displace += normalize(pos(agent) - (*it2)->pos(agent)) * (r - distance);
+                        }
+                    }
+                    if (displace == Point2D{0, 0}) {
+                        continue;
                     }
                 }
-                if (displace == Point2D{0, 0}) {
-                    continue;
-                }
             }
-        }
-        if (std::sqrt(displace.x * displace.x + displace.y * displace.y) < 2) {
-            displace = normalize(displace) * 2;
-        }
-        Point3D upos = pos3D(agent);
-        Point3D blinkPos{upos.x + displace.x, upos.y + displace.y, upos.z};
-        agent->Debug()->DebugLineOut(upos, blinkPos, {24, 123, 250});
-        if (get(agent)->shield < 0.05) {
+            if (std::sqrt(displace.x * displace.x + displace.y * displace.y) < 2) {
+                displace = normalize(displace) * 2;
+            }
+            Point3D upos = pos3D(agent);
+            Point3D blinkPos{upos.x + displace.x, upos.y + displace.y, upos.z};
+            agent->Debug()->DebugLineOut(upos, blinkPos, {24, 123, 250});
             agent->Actions()->UnitCommand(self, ABILITY_ID::EFFECT_BLINK_STALKER, blinkPos);
         }
         return false;

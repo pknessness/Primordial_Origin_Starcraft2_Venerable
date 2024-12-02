@@ -289,6 +289,18 @@ public:
         }
     }
 
+    void neutralDisplay() {
+        for (auto it = UnitManager::neutrals.begin(); it != UnitManager::neutrals.end(); it++) {
+            auto all = it->second;
+            for (auto it2 = all.begin(); it2 != all.end(); it2++) {
+                #define LETTER_DISP -0.07F
+                string s = strprintf("%lx", (*it2)->self);
+                Debug()->DebugTextOut(s, (*it2)->pos3D(this) + Point3D{s.size() * LETTER_DISP, 0.3, 0.5}, Color(210, 55, 55),
+                                      8);
+            }
+        }
+    }
+
     void buildingDisplay() {
         auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
         for (auto it = probes.begin(); it != probes.end(); it++) {
@@ -340,11 +352,27 @@ public:
     void manageArmy() {
         EnemySquads danger = checkDangerAtHome();
         if (danger.size() == 0) {
-            if (squads[0].army.size() == 6) {
+            if ((squads[0].army.size() == 9 && squads[0].withinRadius(this)) || squads[0].army.size() == 11) {
                 squads[0].attack(Observation()->GetGameInfo().enemy_start_locations[0]);
             }
         } else {
-            squads[0].attack(danger[0].center);
+            for (int i = 0; i < danger.size(); i++) {
+                if (danger[i].unitComp.size() == 1 && (danger[i].unitComp[0] == UNIT_TYPEID::PROTOSS_PROBE ||
+                                                       danger[i].unitComp[0] == UNIT_TYPEID::ZERG_DRONE ||
+                                                       danger[i].unitComp[0] == UNIT_TYPEID::TERRAN_SCV)) {
+                    UnitWrappers probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
+                    UnitWrapper* closest = nullptr;
+                    for (UnitWrapper* probeWrap : probes) {
+                        if (closest == nullptr || Distance2D(probeWrap->pos(this), danger[i].center) <
+                                                      Distance2D(closest->pos(this), danger[i].center)) {
+                            closest = probeWrap;
+                        }
+                    }
+                    Actions()->UnitCommand(closest->self, ABILITY_ID::ATTACK, danger[i].center);
+                } else {
+                    squads[0].attack(danger[0].center);
+                }
+            }
         }
     }
 
@@ -360,10 +388,17 @@ public:
                 }
                 if (imRef(Aux::influenceMap, int(pos.x), int(pos.y)) != 0) {
                     //danger.push_back((*it2));
+                    bool added = false;
                     for (int i = 0; i < danger.size(); i++) {
                         if (Distance2D(danger[i].center, pos) < ENEMY_SQUAD_RADIUS) {
                             danger[i].add(*it2, this);
+                            added = true;
+                            break;
                         }
+                    }
+                    if (added == false) {
+                        danger.emplace_back();
+                        danger.back().add(*it2, this);
                     }
                 }
             }
@@ -471,7 +506,7 @@ public:
         }
 
         squads.emplace_back();
-        squads[0].defend(rally_point);
+        squads[0].attack(rally_point);
 
         //Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
         //Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
@@ -587,9 +622,16 @@ public:
     //! In realtime this function gets called as often as possible after request/responses are received from the game
     //! gathering observation state.
     virtual void OnStep() final {
+        Profiler onStepProfiler("onStep");
+        //onStepProfiler.disable();
+
         Macro::execute(this);
 
+        onStepProfiler.midLog("MacroExecute");
+
         Probe::loadAbilities(this);
+
+        onStepProfiler.midLog("LoadAbilities");
 
         auto probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
         for (auto it = probes.begin(); it != probes.end(); it++) {
@@ -597,7 +639,11 @@ public:
             probe->execute(this);
         }
 
+        onStepProfiler.midLog("ProbeExecute");
+
         manageArmy();
+
+        onStepProfiler.midLog("ManageArmy");
 
         string s = "";
         for (int i = 0; i < squads.size(); i ++) {
@@ -607,7 +653,7 @@ public:
                            squads[i].intermediateLoc.y);
             Point2D c = squads[i].center(this);
             Point2D cg = squads[i].center(this);
-            s += strprintf("C:%.1f,%.1f CG:%.1f,%.1f\n", c.x,c.y, cg.x,cg.y);
+            s += strprintf("C:%.1f,%.1f Within?:%d\n", c.x, c.y, squads[i].withinRadius(this));
             for (int a = 0; a < squads[i].army.size(); a++) {
                 squads[i].army[a]->execute(this);
                 s += strprintf("%s %.1fs %c\n", UnitTypeToName(squads[i].army[a]->type),
@@ -622,6 +668,8 @@ public:
             Debug()->DebugSphereOut(P3D(squads[i].intermediateLoc), 0.5, {30,230, 210});
         }
         Debug()->DebugTextOut(s, Point2D(0.71, 0.11), Color(1, 42, 212), 8);
+
+        onStepProfiler.midLog("SquadExecute");
 
         if (Observation()->GetGameLoop() == 2) {
             //HOME BASE MINERALS
@@ -698,12 +746,16 @@ public:
             Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSFACILITY, {-1, -1});
             Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_OBSERVER);
             Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
+
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_TWILIGHTCOUNCIL, {-1, -1});
         } else if (Observation()->GetGameLoop() == int(3.00 * 60 * 22.4)) {
             Macro::addAction(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL, ABILITY_ID::RESEARCH_BLINK);
+            Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSBAY, {-1, -1});
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_COLOSSUS);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_COLOSSUS);
+            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
             //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
             //                   Observation()->GetUnit(UnitManager::getVespene()[2]->self)->pos);
             //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
@@ -719,9 +771,11 @@ public:
             Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
             Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_TEMPLARARCHIVE, {-1, -1});
+            
             Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_WARPPRISM);
         }
+
+        onStepProfiler.midLog("BuildOrderSetup");
 
         int spareMinerals = Observation()->GetMinerals();
         int spareVespene = Observation()->GetVespene();
@@ -741,23 +795,40 @@ public:
             Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER, squads[0].center(this));
         }
 
+        onStepProfiler.midLog("StalkerCreation");
+
         clock_t new_time = clock();
         int dt = (new_time - last_time);
         last_time = new_time;
         Debug()->DebugTextOut(strprintf("%d", dt), Point2D(0.10, 0.10), Color(100, 190, 215), 16);
 
+        onStepProfiler.midLog("DT");
+
         grid();
+
         //pylonBuildingLoc();
         //listUnitWraps();
         //listUnitWrapsNeutral();
         //listUnitWrapsEnemies();
+
         expansionsLoc();
+
         listMacroActions();
+
         probeLines();
+
         orderDisplay();
+
         //tagDisplay();
+        
+        neutralDisplay();
+
         buildingDisplay();
+
         enemiesDisplay();
+
+        onStepProfiler.midLog("Debug");
+
         Debug()->SendDebug();
     }
 
@@ -785,6 +856,9 @@ public:
     //!< \param health The change in health (damage is positive)
     //!< \param shields The change in shields (damage is positive)
     virtual void OnUnitDamaged(const Unit* unit, float health, float shields) {
+        if (unit->alliance == Unit::Alliance::Self) {
+            UnitManager::find(unit->unit_type, unit->tag)->executeDamaged(this, health, shields);
+        }
     }
 
     //! Called when a nydus is placed.
@@ -846,6 +920,9 @@ int main(int argc, char* argv[]) {
 }
 
 //fully optimize
+
+//add no build zone
+//fix building placements with lockout
 
 //weapon net, 8x precision
 

@@ -15,6 +15,7 @@
 using namespace sc2;
 
 #define ACTION_CHECK_DT 10
+#define PROBE_CHECK_DT 30
 #define PROBE_CHECK_DACTION 3
 
 struct MacroAction {
@@ -25,13 +26,28 @@ struct MacroAction {
     int index;
     uint32_t lastChecked;
 
+    float dist_cache;
+    Tag unit_cache;
+
     MacroAction(UnitTypeID unit_type_, AbilityID ability_, Point2D pos_)
-        : unit_type(unit_type_), ability(ability_), pos(pos_), index(globalIndex), lastChecked(0){
+        : unit_type(unit_type_),
+          ability(ability_),
+          pos(pos_),
+          index(globalIndex),
+          lastChecked(0),
+          dist_cache(-1),
+          unit_cache(NullTag) {
         globalIndex ++;
     }
 
     MacroAction(UnitTypeID unit_type_, AbilityID ability_, Point2D pos_, int index)
-        : unit_type(unit_type_), ability(ability_), pos(pos_), index(index), lastChecked(0) {
+        : unit_type(unit_type_),
+          ability(ability_),
+          pos(pos_),
+          index(index),
+          lastChecked(0),
+          dist_cache(-1),
+          unit_cache(NullTag) {
         globalIndex++;
     }
 
@@ -82,6 +98,8 @@ namespace Macro {
             return;
         }
         lastChecked = gt;
+        Profiler macroProfiler("macroExecute");
+        macroProfiler.disable();
         vector<MacroAction> topActions = vector<MacroAction>();
         for (auto it = actions.begin(); it != actions.end(); it++) {
             //vector<MacroAction> acts = it->second;
@@ -131,8 +149,10 @@ namespace Macro {
                 topActions.push_back(currentAction);
             }
         }
+        macroProfiler.midLog("TopSetup");
         diagnostics = "";
         for (int i = 0; i < topActions.size(); i ++) {
+            macroProfiler.subScope();
             MacroAction topAct = topActions[i];
             Units units = agent->Observation()->GetUnits(sc2::Unit::Alliance::Self, 
                 [topAct](const Unit &unit) -> bool { 
@@ -157,6 +177,8 @@ namespace Macro {
 
             UnitTypeID prerequisite = UNIT_TYPEID::INVALID;
 
+            macroProfiler.midLog("RandomSetup");
+
             if (Aux::buildAbilityToUnit(topAct.ability) != UNIT_TYPEID::INVALID) {
                 //UnitTypeData ability_stats = allData.at(static_cast<uint32_t>());
                 UnitTypeData ability_stats = Aux::getStats(Aux::buildAbilityToUnit(topAct.ability), agent);
@@ -171,7 +193,7 @@ namespace Macro {
                     if (actions[UNIT_TYPEID::PROTOSS_PROBE].size() != 0 && actions [UNIT_TYPEID::PROTOSS_PROBE].front().ability == ABILITY_ID::BUILD_PYLON) {
                         actions[UNIT_TYPEID::PROTOSS_PROBE].front().index = 0;
                         diagnostics += "PYLON IN TRANSIT\n\n";
-                        //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                        macroProfiler.midLog("PYLON IN TRANSIT");
                         continue;
                     }
                     for (int i = 0; i < pylons.size(); i++) {
@@ -182,22 +204,26 @@ namespace Macro {
                     }
                     if (cont) {
                         diagnostics += "PYLON BUILDING\n\n";
-                        //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                        macroProfiler.midLog("PYLON BUILDING");
                         continue;
                     }
 
                     addBuildingTop(ABILITY_ID::BUILD_PYLON, Point2D{-1, -1}, 0);
                     diagnostics += "PYLON REQUESTED\n\n";
-                    //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                    macroProfiler.midLog("PYLON REQUESTED");
                     break;
                 }
             }
 
+            macroProfiler.midLog("CheckSupply");
+
             if (units.size() == 0) {
                 diagnostics += "NO FREE UNITS\n\n";
-                //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                macroProfiler.midLog("NO FREE UNITS");
                 continue;
             }
+
+            macroProfiler.midLog("CheckAvailableUnits");
 
             if (topAct.pos == Point2D{-1, -1}) {
                 if (topAct.unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
@@ -205,7 +231,7 @@ namespace Macro {
                         Point2D p = getPylonLocation(agent);
                         if (p == Point2D{-1, -1}) {
                             diagnostics += "INVALID POSITION\n\n";
-                            agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                            macroProfiler.midLog("INVALID POSITION");
                             continue;
                         }
                         topAct.pos = p;
@@ -214,13 +240,14 @@ namespace Macro {
                         if (Aux::requiresPylon(topAct.ability)) {
                             if (UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON).size() == 0) {
                                 diagnostics += "NO PYLONS EXIST 1\n\n";
+                                macroProfiler.midLog("NO PYLONS EXIST 1");
                                 continue;
                             }
                         }
                         Point2D p = getBuildingLocation(agent);
                         if (p == Point2D{-1, -1}) {
                             diagnostics += "INVALID POSITION\n\n";
-                            agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                            macroProfiler.midLog("INVALID POSITION");
                             continue;
                         }
                         topAct.pos = p;
@@ -228,12 +255,13 @@ namespace Macro {
                     }
                 } else {
                     diagnostics += strprintf("NO LOCATION\n\n");
+                    macroProfiler.midLog("NO LOCATION");
                     continue;
-                    //printf("NO LOCATION FOR %s\n", UnitTypeToName(topAct.unit_type));
-                    //continue;
                 }
 
             }
+
+            macroProfiler.midLog("GenerateBuildingLocation");
 
             if (topAct.unit_type == UNIT_TYPEID::PROTOSS_WARPGATE) {
                 auto sources = agent->Observation()->GetPowerSources();
@@ -246,6 +274,7 @@ namespace Macro {
                 }
                 if (index == -1) {
                     diagnostics += strprintf("NO PYLONS???\n\n");
+                    macroProfiler.midLog("NO PYLONS???");
                     continue;
                 }
                 for (int ao = 0; ao < 200; ao++) {
@@ -264,9 +293,12 @@ namespace Macro {
                 }
                 if (topAct.pos == Point2D{-1, -1}) {
                     diagnostics += strprintf("NO WARP LOCATION FOUND\n\n");
+                    macroProfiler.midLog("NO WARP LOCATION FOUND");
                     continue;
                 }
             }
+
+            macroProfiler.midLog("GenerateWarpgateLocation");
 
             Cost c = Aux::abilityToCost(topAct.ability, agent);
             int theoreticalMinerals = agent->Observation()->GetMinerals();
@@ -282,6 +314,8 @@ namespace Macro {
                 }
             }
 
+            macroProfiler.midLog("CalculateBuildingDebt");
+
             //if (theoreticalMinerals < c.minerals - 30 && theoreticalVespene < c.vespene - 30) {
             //    break;
             //}
@@ -293,11 +327,12 @@ namespace Macro {
 
             if (topAct.unit_type == UNIT_TYPEID::PROTOSS_PROBE && topAct.ability != ABILITY_ID::MOVE_MOVE &&
                 topAct.ability != ABILITY_ID::MOVE_MOVEPATROL) {
+                macroProfiler.subScope();
 
                 if (prerequisite != UNIT_TYPEID::INVALID && UnitManager::get(prerequisite).size() == 0) {
                     addBuildingTop(Aux::unitToBuildAbility(prerequisite), Point2D{-1, -1}, topAct.index);
                     diagnostics += strprintf("PREREQUISITE REQUIRED: %s\n\n", UnitTypeToName(prerequisite));
-                    //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                    macroProfiler.midLog("PREREQUISITE REQUIRED");
                     continue;
                 }
 
@@ -306,6 +341,7 @@ namespace Macro {
                 if (Aux::requiresPylon(topAct.ability)) {
                     if (UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON).size() == 0) {
                         diagnostics += "NO PYLONS EXIST 2\n\n";
+                        macroProfiler.midLog("NO PYLONS EXIST 2");
                         continue;
                     }
                     //auto pylons = UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON);
@@ -322,40 +358,73 @@ namespace Macro {
                     }
                     if (!foundPylon) {
                         diagnostics += "NO PYLON IN VICINITY\n\n";
-                        //agent->Debug()->DebugTextOut(diagnostics, diag, Color(100, 190, 215), 8);
+                        macroProfiler.midLog("NO PYLON IN VICINITY");
                         continue;
                     }
                 }
-                
+                macroProfiler.midLog("PylonCheck1");
 
-                float mindist = -1;
-                for (const Unit *uni : units) {
-                    Point2DI start = uni->pos;
-                    Point2DI goal = topAct.pos;
+                //float dt = 0;
+                float mindist = actions[UNIT_TYPEID::PROTOSS_PROBE].front().dist_cache;
+                actionUnit = agent->Observation()->GetUnit(actions[UNIT_TYPEID::PROTOSS_PROBE].front().unit_cache);
 
-                    float dist = 0;
-                    if (topAct.ability == ABILITY_ID::BUILD_ASSIMILATOR) {
-                        dist = Distance2D(P2D(start), P2D(goal));
-                    } else {
-                        auto came_from = jps(gridmap, start, goal, Tool::euclidean, agent);
-                        vector<Location> pat = Tool::reconstruct_path(start, goal, came_from);
-                        dist = fullDist(pat);
-                    }
-                    
-                    //printf("%.2f %.2f\n", agent->Query()->PathingDistance(uni, topAct.pos), dist);
+                const Unit *uni = units[std::rand() % units.size()];
 
-                    if (mindist == -1 || dist < mindist) {
-                        mindist = dist;
-                        actionUnit = uni;
-                    }
+                Point2DI start = uni->pos;
+                Point2DI goal = topAct.pos;
+
+                float dist = 0;
+                if (topAct.ability == ABILITY_ID::BUILD_ASSIMILATOR) {
+                    dist = Distance2D(P2D(start), P2D(goal));
+                } else {
+                    auto came_from = jps(gridmap, start, goal, Tool::euclidean, agent);
+                    vector<Location> pat = Tool::reconstruct_path(start, goal, came_from);
+                    dist = fullDist(pat);
                 }
 
-                // float dt = agent->Query()->PathingDistance(actionUnit, topAct.pos) / (unit_stats.movement_speed *
-                // timeSpeed);
-                float dt = (mindist-2) / (unit_stats.movement_speed * timeSpeed);
+                if (mindist == -1 || dist < mindist || actionUnit == nullptr) {
+                    mindist = dist;
+                    actionUnit = uni;
+                    actions[UNIT_TYPEID::PROTOSS_PROBE].front().dist_cache = dist;
+                    actions[UNIT_TYPEID::PROTOSS_PROBE].front().unit_cache = uni->tag;
+                }
+
+                float dt = (mindist - 2) / (unit_stats.movement_speed * timeSpeed);
 
                 if (mindist == -1)
                     dt = 0;
+
+                //float mindist = -1;
+
+                //for (const Unit *uni : units) {
+                //    Point2DI start = uni->pos;
+                //    Point2DI goal = topAct.pos;
+
+                //    float dist = 0;
+                //    if (topAct.ability == ABILITY_ID::BUILD_ASSIMILATOR) {
+                //        dist = Distance2D(P2D(start), P2D(goal));
+                //    } else {
+                //        auto came_from = jps(gridmap, start, goal, Tool::euclidean, agent);
+                //        vector<Location> pat = Tool::reconstruct_path(start, goal, came_from);
+                //        dist = fullDist(pat);
+                //    }
+
+                //    // printf("%.2f %.2f\n", agent->Query()->PathingDistance(uni, topAct.pos), dist);
+
+                //    if (mindist == -1 || dist < mindist) {
+                //        mindist = dist;
+                //        actionUnit = uni;
+                //    }
+                //}
+
+                //// float dt = agent->Query()->PathingDistance(actionUnit, topAct.pos) / (unit_stats.movement_speed *
+                //// timeSpeed);
+                //dt = (mindist - 2) / (unit_stats.movement_speed * timeSpeed);
+
+                //if (mindist == -1)
+                //    dt = 0;
+                
+                macroProfiler.midLog("ProbeDistanceCheck");
                 
                 if (Aux::requiresPylon(topAct.ability) && viablePylons.back()->build_progress != 1.0) {
                     //UnitTypeData pylon_stats = allData.at(static_cast<uint32_t>(UNIT_TYPEID::PROTOSS_PYLON));
@@ -370,10 +439,12 @@ namespace Macro {
                     }
                     if (found == false) {
                         diagnostics += "NO ACTIVE PYLON IN VICINITY\n\n";
-                        //agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
+                        macroProfiler.midLog("NO ACTIVE PYLON IN VICINITY");
                         continue;
                     }
                 }
+
+                macroProfiler.midLog("PylonCheck2");
 
                 if (prerequisite != UNIT_TYPEID::INVALID) {
                     //UnitTypeData prereq_stats = allData.at(static_cast<uint32_t>(prerequisite));
@@ -390,10 +461,12 @@ namespace Macro {
                     }
                     if (found == false) {
                         diagnostics += "PREQUISITE NOT READY\n\n";
-                        //agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
+                        macroProfiler.midLog("PREQUISITE NOT READY");
                         continue;
                     }
                 }
+
+                macroProfiler.midLog("PrereqCheck");
 
                 //printf("%.2f %.2f\n", agent->Query()->PathingDistance(actionUnit, topAct.pos), mindist);
 
@@ -411,11 +484,18 @@ namespace Macro {
 
                 theoreticalMinerals += (dt * Aux::MINERALS_PER_PROBE_PER_SEC * numMineralMiners);
                 theoreticalVespene += (dt * Aux::VESPENE_PER_PROBE_PER_SEC * numVespeneMiners);
+                macroProfiler.midLog("TheoryResources");
             } else {
+                macroProfiler.subScope();
+
                 if (theoreticalMinerals < int(c.minerals) || theoreticalVespene < int(c.vespene)) {
                     diagnostics += "NOT ENOUGH RESOURCES\n\n";
+                    macroProfiler.midLog("NOT ENOUGH RESOURCES");
                     break;
                 }
+
+                macroProfiler.midLog("CheckResources");
+
                 auto abil = agent->Query()->GetAbilitiesForUnits(units);
                 for (int i = 0; i < units.size(); i++) {
                     for (int a = 0; a < abil[i].abilities.size(); a ++) {
@@ -424,10 +504,14 @@ namespace Macro {
                         }
                     }
                 }
+
+                macroProfiler.midLog("CheckAbilities");
+
                 if (actionUnit == nullptr) {
                     diagnostics += "NO UNIT WITH RELEVANT ABILITY";
-                    diagnostics += strprintf(" %d/%d %d/%d\n\n", theoreticalMinerals, int(c.minerals),
-                                             theoreticalVespene, int(c.vespene));
+                    //diagnostics += strprintf(" %d/%d %d/%d\n\n", theoreticalMinerals, int(c.minerals),
+                    //                         theoreticalVespene, int(c.vespene));
+                    macroProfiler.midLog("NO UNIT WITH RELEVANT ABILITY");
                     continue;
                 }
 
@@ -446,10 +530,11 @@ namespace Macro {
                     }
                     if (found == false) {
                         diagnostics += "PREQUISITE NOT READY\n\n";
-                        //agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
+                        macroProfiler.midLog("PREQUISITE NOT READY");
                         continue;
                     }
                 }
+                macroProfiler.midLog("PrereqCheck");
             }
 
             //printf("M:%d V:%d | %s %llx %s M:%d/%d V:%d/%d S:%d/%d\n", agent->Observation()->GetMinerals(),
@@ -457,10 +542,12 @@ namespace Macro {
             //       UnitTypeToName(topAct.unit_type), actionUnit->tag,
             //       AbilityTypeToName(topAct.ability), theoreticalMinerals,
             //       int(c.minerals), theoreticalVespene, int(c.vespene), agent->Observation()->GetFoodUsed(), c.psi);
+            macroProfiler.subScope();
             if (theoreticalMinerals >= int(c.minerals) && theoreticalVespene >= int(c.vespene)) {
                 if (topAct.pos != Point2D{0, 0}) {
                     if (topAct.pos == Point2D{-1, -1}) {
                         diagnostics += "POS NOT DEFINED EARLIER\n\n";
+                        macroProfiler.midLog("POS NOT DEFINED EARLIER");
                         continue;
                     } else {
                         if (topAct.unit_type == UNIT_TYPEID::PROTOSS_PROBE) {
@@ -484,11 +571,11 @@ namespace Macro {
                 }
                 
                 diagnostics += "SUCCESS\n\n";
-                //agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
+                macroProfiler.midLog("SUCCESS");
                 break;
             }
             diagnostics += "NOT ENOUGH RESOURCES\n\n";
-            //agent->Debug()->DebugTextOut(diagnostics, Point2D(0.01 + 0.02 * i, 0.01), Color(100, 190, 215), 8);
+            macroProfiler.midLog("NOT ENOUGH RESOURCES");
             break;
         }
     }

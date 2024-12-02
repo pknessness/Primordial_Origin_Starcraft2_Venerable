@@ -12,6 +12,8 @@ public:
     Point3D lastPos;
     float radius;
     Unit::Alliance team;
+    AvailableAbilities abilities;
+    int8_t ignoreFrames;
 
     //UnitWrapper(Tag self_);
 
@@ -29,6 +31,10 @@ public:
     Point3D pos3D(Agent *agent);
 
     virtual bool execute(Agent *agent);
+
+    virtual bool executeDamaged(Agent *agent, float health, float shields) {
+        return false;
+    }
 
     virtual ~UnitWrapper();
 };
@@ -162,6 +168,7 @@ UnitWrapper::UnitWrapper(const Unit *unit) : self(unit->tag), type(unit->unit_ty
         }
         UnitManager::enemies[type].push_back(this);
     }
+    ignoreFrames = 0;
 }
 
 Point2D UnitWrapper::pos(Agent *agent) {

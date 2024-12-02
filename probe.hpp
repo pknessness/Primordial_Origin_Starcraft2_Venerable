@@ -83,7 +83,6 @@ private:
 
 public:
     vector<Building> buildings;
-    AvailableAbilities abilities;
 
     //Probe(Tag self_) : UnitWrapper(self_, UNIT_TYPEID::PROTOSS_PROBE) {
     //    target = 0;
@@ -99,6 +98,9 @@ public:
     }
 
     Tag getTargetTag(Agent *agent) {
+        if (agent->Observation()->GetUnit(target) == nullptr) {
+            target = NullTag;
+        }
         if (target == NullTag) {
             Units minerals = agent->Observation()->GetUnits(Unit::Alliance::Neutral, Aux::isMineral);
             Units assimilators = agent->Observation()->GetUnits(Unit::Alliance::Self, Aux::isAssimilator);
@@ -143,16 +145,45 @@ public:
             return false;
         }
         if (buildings.size() == 0) {
-            if (agent->Observation()->GetUnit(self)->orders.size() == 0 ||
-                (agent->Observation()->GetUnit(self)->orders[0].ability_id == ABILITY_ID::HARVEST_GATHER &&
-                 agent->Observation()->GetUnit(self)->orders[0].target_unit_tag != target)) {
-                if (checkAbility(ABILITY_ID::HARVEST_RETURN)) {
-                    agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_RETURN);
-                } else {
+            if (ignoreFrames == 0) {
+                ignoreFrames--;
+            } else {
+                if (get(agent)->orders.size() == 0) {
                     agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_GATHER, getTargetTag(agent));
+                    if (checkAbility(ABILITY_ID::HARVEST_RETURN)) {
+                        agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_RETURN);
+                    }
+                } else {
+                    if (get(agent)->orders[0].ability_id == ABILITY_ID::HARVEST_GATHER &&
+                        get(agent)->orders[0].target_unit_tag != getTargetTag(agent)) {
+
+                        //if (get(agent)->orders.size() != 0)
+                        //    printf("%Ix compare %Ix\n", get(agent)->orders[0].target_unit_tag, target);
+                        Tag harvest = getTargetTag(agent);
+                        if (harvest == NullTag) {
+                            ignoreFrames = 100;
+                        } else {
+                            agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_GATHER, getTargetTag(agent));
+                        }
+
+                    }
                 }
+                //if (checkAbility(ABILITY_ID::HARVEST_RETURN) && get(agent)->orders.size() == 0 ||
+                //    get(agent)->orders[0].ability_id == ABILITY_ID::HARVEST_RETURN) {
+                //    agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_RETURN);
+                //} else if (get(agent)->orders.size() == 0 ||
+                //           (get(agent)->orders[0].ability_id == ABILITY_ID::HARVEST_GATHER &&
+                //            get(agent)->orders[0].target_unit_tag != getTargetTag(agent))) {
+                //    if (get(agent)->orders.size() != 0)
+                //        printf("%Ix compare %Ix\n", get(agent)->orders[0].target_unit_tag, target);
+                //    Tag harvest = getTargetTag(agent);
+                //    if (harvest == NullTag) {
+                //        ignoreFrames = 100;
+                //    } else {
+                //        agent->Actions()->UnitCommand(self, ABILITY_ID::HARVEST_GATHER, getTargetTag(agent));
+                //    }
+                //}
             }
-            
         } else {
             Building top = buildings[0];
             if (Distance2D(agent->Observation()->GetUnit(self)->pos, top.pos) < 2) {
@@ -200,6 +231,7 @@ public:
                 }
                 buildings.erase(buildings.begin());
             } else {
+                //agent->Actions()->UnitCommand(self, ABILITY_ID::MOVE_MOVE, top.pos);
                 const Unit *prob = get(agent);
                 if (prob->orders.size() == 0 || prob->orders.front().target_pos != top.pos) {
                     agent->Actions()->UnitCommand(self, ABILITY_ID::MOVE_MOVE, top.pos);
@@ -212,15 +244,15 @@ public:
     static void loadAbilities(Agent *agent) {
         Units u;
         vector<UnitWrapper *> probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
-        for (int i = 0; i < probes.size(); i++) {
-            const Unit *unit = agent->Observation()->GetUnit(probes[i]->self);
-            if (unit != nullptr) {
-                u.push_back(unit);
-            } else {
-                probes.erase(probes.begin() + i);
-                i --;
-            }
-        }
+        //for (int i = 0; i < probes.size(); i++) {
+        //    const Unit *unit = agent->Observation()->GetUnit(probes[i]->self);
+        //    if (unit != nullptr) {
+        //        u.push_back(unit);
+        //    } else {
+        //        probes.erase(probes.begin() + i);
+        //        i --;
+        //    }
+        //}
         vector<AvailableAbilities> allAb = agent->Query()->GetAbilitiesForUnits(u);
         for (int i = 0; i < allAb.size(); i++) {
             if (probes[i]->self == allAb[i].unit_tag) {
