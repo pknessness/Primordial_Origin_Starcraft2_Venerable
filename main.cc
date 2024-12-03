@@ -11,6 +11,7 @@
 #include "unitmanager.hpp"
 #include "dist_transform.hpp"
 #include "zhangSuen.hpp"
+#include "spacialhashgrid.hpp"
 #include "BoudaoudSiderTariThinning.hpp"
 
 
@@ -184,6 +185,66 @@ public:
                     float disp = cs.length() * 0.0667 * fontSize / 15;
                     Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1 + displace),
                                           Color(200, 190, 115), fontSize);*/
+                }
+            }
+        }
+    }
+
+    void displaySpacialHashGrid() {
+        GameInfo game_info = Observation()->GetGameInfo();
+
+        int mapWidth = game_info.width;
+        int mapHeight = game_info.height;
+
+        Point2D center = Observation()->GetCameraPos();
+        int wS = int(center.x) - 10;
+        if (wS < 0)
+            wS = 0;
+        int hS = int(center.y) - 5;
+        if (hS < 0)
+            hS = 0;
+        int wE = int(center.x) + 11;
+        if (wE > mapWidth)
+            wE = mapWidth;
+        int hE = int(center.y) + 14;
+        if (hE > mapHeight)
+            hE = mapHeight;
+
+        int fontSize = 8;
+
+        #define BOX_BORDER 0.02
+
+        for (int w = wS; w < wE; w++) {
+            for (int h = hS; h < hE; h++) {
+                Point2DI point = Point2DI(w, h);
+                float boxHeight = 0;
+                Color c(255, 255, 255);
+
+                // for (auto loc : path) {
+                //     if (loc.x == w && loc.y == h) {
+                //         c = Color(120, 23, 90);
+                //         break;
+                //     }
+                // }
+
+                if (imRef(SpacialHash::grid, w, h).size() != 0) {
+                        c = {20, 200, 210};
+                }
+
+                if (0 || !(c.r == 255 && c.g == 255 && c.b == 255)) {
+                    float height = Observation()->TerrainHeight(P2D(point) + Point2D{0.5F, 0.5F});
+
+                    Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
+                                            Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
+                    #if MICRO_TEST
+                        Debug()->DebugTextOut(strprintf("%d, %d", w, h),
+                                            Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
+                                            Color(200, 90, 15), 4);
+                    #endif
+                    /*std::string cs = imRef(display, w, h);
+                    float disp = cs.length() * 0.0667 * fontSize / 15;
+                    Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1 + displace),
+                                            Color(200, 190, 115), fontSize);*/
                 }
             }
         }
@@ -426,6 +487,7 @@ public:
         last_time = clock();
         int mapWidth = Observation()->GetGameInfo().width;
         int mapHeight = Observation()->GetGameInfo().height;
+        SpacialHash::grid = new map2d<UnitWrappers>(mapWidth, mapHeight, true);
         Aux::buildingBlocked = new map2d<int8_t>(mapWidth, mapHeight, true);
         Aux::influenceMap = new map2d<int8_t>(mapWidth, mapHeight, true);
         Aux::influenceMapEnemy = new map2d<int8_t>(mapWidth, mapHeight, true);
@@ -646,7 +708,7 @@ public:
     //! gathering observation state.
     virtual void OnStep() final {
         Profiler onStepProfiler("onStep");
-        //onStepProfiler.disable();
+        onStepProfiler.disable();
 
         Macro::execute(this);
 
@@ -664,6 +726,10 @@ public:
         }
 
         onStepProfiler.midLog("ProbeExecute");
+
+        SpacialHash::updateGrid(this);
+
+        onStepProfiler.midLog("SpacialHashUpdate");
 
         manageArmy();
 
@@ -848,7 +914,9 @@ public:
 
         onStepProfiler.midLog("DT");
 
-        grid();
+        //grid();
+
+        displaySpacialHashGrid();
 
         //pylonBuildingLoc();
         //listUnitWraps();
