@@ -262,13 +262,4 @@ public:
             }
         }
     }
-
-    bool checkAbility(AbilityID ability) {
-        for (int i = 0; i < abilities.abilities.size(); i++) {
-            if (ability == abilities.abilities[i].ability_id) {
-                return true;
-            }
-        }
-        return false;
-    }
 };

@@ -13,6 +13,11 @@
 #include "zhangSuen.hpp"
 #include "BoudaoudSiderTariThinning.hpp"
 
+
+#define MICRO_TEST 0
+#define START_ME Point2D{40,50}
+#define START_OP Point2D{60,50}
+
 using namespace sc2;
 
 class Bot : public Agent {
@@ -170,9 +175,11 @@ public:
 
                     Debug()->DebugBoxOut(Point3D(w + BOX_BORDER, h + BOX_BORDER, height + 0.01),
                                          Point3D(w + 1 - BOX_BORDER, h + 1 - BOX_BORDER, height + boxHeight), c);
-                    Debug()->DebugTextOut(strprintf("%d, %d", w, h),
-                                          Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
-                                          Color(200, 90, 15), 4);
+                    #if MICRO_TEST
+                        Debug()->DebugTextOut(strprintf("%d, %d", w, h),
+                                              Point3D(w + BOX_BORDER, h + 0.2 + BOX_BORDER, height + 0.1),
+                                              Color(200, 90, 15), 4);
+                    #endif
                     /*std::string cs = imRef(display, w, h);
                     float disp = cs.length() * 0.0667 * fontSize / 15;
                     Debug()->DebugTextOut(cs, Point3D(w + 0.5 - disp, h + 0.5, height + 0.1 + displace),
@@ -352,9 +359,15 @@ public:
     void manageArmy() {
         EnemySquads danger = checkDangerAtHome();
         if (danger.size() == 0) {
-            if ((squads[0].army.size() == 9 && squads[0].withinRadius(this)) || squads[0].army.size() == 11) {
-                squads[0].attack(Observation()->GetGameInfo().enemy_start_locations[0]);
-            }
+            #if MICRO_TEST
+                squads[0].attack(START_OP);
+            #else
+                if ((squads[0].army.size() > 9 && squads[0].withinRadius(this)) || squads[0].army.size() > 11) {
+                    squads[0].attack(Observation()->GetGameInfo().enemy_start_locations[0]);
+                } else {
+                    squads[0].attack(rally_point);
+                }
+            #endif
         } else {
             for (int i = 0; i < danger.size(); i++) {
                 if (danger[i].unitComp.size() == 1 && (danger[i].unitComp[0] == UNIT_TYPEID::PROTOSS_PROBE ||
@@ -411,11 +424,12 @@ public:
         //profilerPrint = false;
         profilerThreshold = 10;
         last_time = clock();
-        Aux::buildingBlocked = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
-        Aux::influenceMap = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
-        Aux::influenceMapEnemy =
-            new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
-        path_zhang_suen = new map2d<int8_t>(Observation()->GetGameInfo().width, Observation()->GetGameInfo().height, true);
+        int mapWidth = Observation()->GetGameInfo().width;
+        int mapHeight = Observation()->GetGameInfo().height;
+        Aux::buildingBlocked = new map2d<int8_t>(mapWidth, mapHeight, true);
+        Aux::influenceMap = new map2d<int8_t>(mapWidth, mapHeight, true);
+        Aux::influenceMapEnemy = new map2d<int8_t>(mapWidth, mapHeight, true);
+        path_zhang_suen = new map2d<int8_t>(mapWidth, mapHeight, true);
 
         for (int i = 0; i < path_zhang_suen->width(); i++) {
             for (int j = 0; j < path_zhang_suen->height(); j++) {
@@ -444,12 +458,14 @@ public:
             }
         }
 
-        for (int i = -4; i <= 4; i++) {
-            for (int j = -4; j <= 4; j++) {
-                imRef(path_zhang_suen, int(Observation()->GetStartLocation().x + i),
-                      int(Observation()->GetStartLocation().y + j)) = 1;
+        #if MICRO_TEST == 0
+            for (int i = -4; i <= 4; i++) {
+                for (int j = -4; j <= 4; j++) {
+                    imRef(path_zhang_suen, int(Observation()->GetStartLocation().x + i),
+                          int(Observation()->GetStartLocation().y + j)) = 1;
+                }
             }
-        }
+        #endif
 
         zhangSuenThinning(path_zhang_suen, this);
         //thinning_BST(path_zhang_suen, this);
@@ -479,6 +495,7 @@ public:
 
         vector<Point2DI> possiblePoints;
 
+        #if MICRO_TEST == 0
         for (int i = -12; i <= 12; i++) {
             for (int j = -12; j <= 12; j++) {
                 float d = Distance2D(Point2D{i + 0.5F, j + 0.5F}, {0,0});
@@ -488,6 +505,7 @@ public:
                 }
             }
         }
+        #endif
 
         float min = -1;
 
@@ -506,7 +524,12 @@ public:
         }
 
         squads.emplace_back();
-        squads[0].attack(rally_point);
+        #if MICRO_TEST
+            squads[0].attack(START_OP);
+        #else
+            squads[0].attack(rally_point);
+        #endif
+        
 
         //Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, middle, 1, 6);
         //Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, Observation()->GetGameInfo().enemy_start_locations[0], 2, 16);
@@ -629,7 +652,8 @@ public:
 
         onStepProfiler.midLog("MacroExecute");
 
-        Probe::loadAbilities(this);
+        //Probe::loadAbilities(this);
+        UnitWrapper::loadAbilities(this);
 
         onStepProfiler.midLog("LoadAbilities");
 
@@ -653,7 +677,7 @@ public:
                            squads[i].intermediateLoc.y);
             Point2D c = squads[i].center(this);
             Point2D cg = squads[i].center(this);
-            s += strprintf("C:%.1f,%.1f Within?:%d\n", c.x, c.y, squads[i].withinRadius(this));
+            s += strprintf("C:%.1f,%.1f Within?:%d S:%d\n", c.x, c.y, squads[i].withinRadius(this), squads[i].army.size());
             for (int a = 0; a < squads[i].army.size(); a++) {
                 squads[i].army[a]->execute(this);
                 s += strprintf("%s %.1fs %c\n", UnitTypeToName(squads[i].army[a]->type),
@@ -670,110 +694,130 @@ public:
         Debug()->DebugTextOut(s, Point2D(0.71, 0.11), Color(1, 42, 212), 8);
 
         onStepProfiler.midLog("SquadExecute");
+        #if MICRO_TEST == 0
+            if (Observation()->GetGameLoop() == 2) {
+                //HOME BASE MINERALS
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
 
-        if (Observation()->GetGameLoop() == 2) {
-            //HOME BASE MINERALS
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+                //HOME BASE VESPENE 1
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
 
-            //HOME BASE VESPENE 1
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+                //HOME BASE VESPENE 2
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
 
-            //HOME BASE VESPENE 2
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+                //NATURAL MINERALS
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();//
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();//
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();//
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();//
 
-            //NATURAL MINERALS
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();//
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();//
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();//
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();//
+                //NATURAL GAS 1
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
 
-            //NATURAL GAS 1
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+                //NATURAL GAS 2
+                Macro::addProbe();
+                Macro::addProbe();
+                Macro::addProbe();
 
-            //NATURAL GAS 2
-            Macro::addProbe();
-            Macro::addProbe();
-            Macro::addProbe();
+                //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
+                //Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-2.5, 0.5});
+                //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                //                   Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
+                //Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
+                //Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{2.5, -0.5});
+                //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                //                   Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
+                //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location) - Point2D{0.5, -2.5});
+                //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+                //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+                //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+                //Macro::addBuilding(ABILITY_ID::BUILD_STARGATE, P2D(staging_location) - Point2D{-0.5, 3});
 
-            //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
-            //Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, P2D(staging_location) - Point2D{-2.5, 0.5});
-            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-            //                   Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
-            //Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
-            //Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, P2D(staging_location) - Point2D{2.5, -0.5});
-            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-            //                   Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
-            //Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location) - Point2D{0.5, -2.5});
-            //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
-            //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
-            //Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
-            //Macro::addBuilding(ABILITY_ID::BUILD_STARGATE, P2D(staging_location) - Point2D{-0.5, 3});
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
 
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, P2D(staging_location));
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1,-1});
-            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-                               Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
-            Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, {-1, -1});
-            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
-            Macro::addAction(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE);
-            Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
-            Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-                               Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
-            Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
-            Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSFACILITY, {-1, -1});
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_OBSERVER);
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1,-1});
 
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_TWILIGHTCOUNCIL, {-1, -1});
-        } else if (Observation()->GetGameLoop() == int(3.00 * 60 * 22.4)) {
-            Macro::addAction(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL, ABILITY_ID::RESEARCH_BLINK);
-            Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSBAY, {-1, -1});
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_COLOSSUS);
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_COLOSSUS);
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
-            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-            //                   Observation()->GetUnit(UnitManager::getVespene()[2]->self)->pos);
-            //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
-            //                   Observation()->GetUnit(UnitManager::getVespene()[3]->self)->pos);
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
-            Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                                   Observation()->GetUnit(UnitManager::getVespene()[0]->self)->pos);
+
+                Macro::addBuilding(ABILITY_ID::BUILD_CYBERNETICSCORE, {-1, -1});
+
+                Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+
+                Macro::addAction(UNIT_TYPEID::PROTOSS_CYBERNETICSCORE, ABILITY_ID::RESEARCH_WARPGATE);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSBAY, ABILITY_ID::RESEARCH_EXTENDEDTHERMALLANCE);
+
+                Macro::addBuilding(ABILITY_ID::BUILD_NEXUS, P2D(rankedExpansions[0]));
+
+                Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                                   Observation()->GetUnit(UnitManager::getVespene()[1]->self)->pos);
+
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+                Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+
+                Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSFACILITY, {-1, -1});
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_OBSERVER);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
+
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_TWILIGHTCOUNCIL, {-1, -1});
+
+                Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_GATEWAY, ABILITY_ID::TRAIN_STALKER);
+
+            } else if (Observation()->GetGameLoop() == int(3.00 * 60 * 22.4)) {
+
+                Macro::addAction(UNIT_TYPEID::PROTOSS_TWILIGHTCOUNCIL, ABILITY_ID::RESEARCH_BLINK);
+
+                Macro::addBuilding(ABILITY_ID::BUILD_ROBOTICSBAY, {-1, -1});
+
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_COLOSSUS);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_COLOSSUS);
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_IMMORTAL);
+
+                //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                //                   Observation()->GetUnit(UnitManager::getVespene()[2]->self)->pos);
+                //Macro::addBuilding(ABILITY_ID::BUILD_ASSIMILATOR,
+                //                   Observation()->GetUnit(UnitManager::getVespene()[3]->self)->pos);
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_GATEWAY, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
+                Macro::addBuilding(ABILITY_ID::BUILD_PYLON, {-1, -1});
             
-            Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_WARPPRISM);
-        }
+                Macro::addAction(UNIT_TYPEID::PROTOSS_ROBOTICSFACILITY, ABILITY_ID::TRAIN_WARPPRISM);
+            }
+        #endif
 
         onStepProfiler.midLog("BuildOrderSetup");
 
@@ -835,8 +879,13 @@ public:
     //!  Called when a neutral unit is created. For example, mineral fields observed for the first time
     //!< \param unit The observed unit.
     virtual void OnNeutralUnitCreated(const Unit* unit) {
-        UnitWrapper* u = new UnitWrapper(unit);
-        u->execute(this);
+        if (Aux::isVespene(*unit)) {
+            Vespene* u = new Vespene(unit);
+            u->execute(this);
+        } else {
+            UnitWrapper* u = new UnitWrapper(unit);
+            u->execute(this);
+        }
     }
 
     //! Called when an upgrade is finished, warp gate, ground weapons, baneling speed, etc.
@@ -856,8 +905,9 @@ public:
     //!< \param health The change in health (damage is positive)
     //!< \param shields The change in shields (damage is positive)
     virtual void OnUnitDamaged(const Unit* unit, float health, float shields) {
-        if (unit->alliance == Unit::Alliance::Self) {
-            UnitManager::find(unit->unit_type, unit->tag)->executeDamaged(this, health, shields);
+        UnitWrapper* wrap = UnitManager::find(unit->unit_type, unit->tag);
+        if (unit->alliance == Unit::Alliance::Self && wrap != nullptr) {
+            wrap->executeDamaged(this, health, shields);
         }
     }
 
@@ -901,20 +951,41 @@ int main(int argc, char* argv[]) {
     coordinator.LoadSettings(argc, argv);
 
     Bot bot;
-    Difficulty diff = Difficulty::Medium;
-    Race race = (Race)(std::rand() % 4);  // Race::Random;
-    coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
+    Difficulty diff = Difficulty::Hard;
 
-    coordinator.LaunchStarcraft();
-    std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map",  "5_13/Equilibrium513AIE.SC2Map",
-                           "5_13/GoldenAura513AIE.SC2Map", "5_13/Gresvan513AIE.SC2Map",
-                           "5_13/HardLead513AIE.SC2Map",   "5_13/SiteDelta513AIE.SC2Map"};
-    int r = std::rand() % 6;
-    printf("rand %d [%d %d %d %d %d %d] %d\n", r, std::rand(), std::rand(), std::rand(), std::rand(), std::rand(), std::rand(), RAND_MAX);
+    if (MICRO_TEST) {
+        Race race = Race::Random;
+        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
 
-    coordinator.StartGame(maps[r]);
-    while (coordinator.Update()) {
+        coordinator.LaunchStarcraft();
+        //coordinator.StartGame("MicroAIArena/Tier1MicroAIArena_v1.SC2Map");
+        coordinator.StartGame("Test/Empty.SC2Map");
+
+        bot.Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_STALKER, START_ME, 1, 6);
+
+        bot.Debug()->DebugCreateUnit(UNIT_TYPEID::ZERG_ZERGLING, START_OP, 2, 16);
+        bot.Debug()->DebugCreateUnit(UNIT_TYPEID::PROTOSS_ADEPT, START_OP, 2, 2);
+
+        while (coordinator.Update()) {
+        }
+
+    } else {
+        Race race = (Race)(std::rand() % 4);  // Race::Random;
+        coordinator.SetParticipants({CreateParticipant(Race::Protoss, &bot), CreateComputer(race, diff)});
+
+        coordinator.LaunchStarcraft();
+        std::string maps[6] = {"5_13/Oceanborn513AIE.SC2Map",  "5_13/Equilibrium513AIE.SC2Map",
+                               "5_13/GoldenAura513AIE.SC2Map", "5_13/Gresvan513AIE.SC2Map",
+                               "5_13/HardLead513AIE.SC2Map",   "5_13/SiteDelta513AIE.SC2Map"};
+        int r = std::rand() % 6;
+        printf("rand %d [%d %d %d %d %d %d] %d\n", r, std::rand(), std::rand(), std::rand(), std::rand(), std::rand(),
+               std::rand(), RAND_MAX);
+
+        coordinator.StartGame(maps[r]);
+        while (coordinator.Update()) {
+        }
     }
+
 
     return 0;
 }
@@ -923,6 +994,10 @@ int main(int argc, char* argv[]) {
 
 //add no build zone
 //fix building placements with lockout
+//remove double actions from army units
+
+//add correctly timed kiting
+//stay on border of your own
 
 //weapon net, 8x precision
 

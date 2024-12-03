@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "probe.hpp"
+#include "vespene.hpp"
 #include "armyunit.hpp"
 //#include "jps.hpp"
 //#include "grid.hpp"
@@ -236,6 +237,27 @@ namespace Macro {
                         }
                         topAct.pos = p;
                         actions[topAct.unit_type].front().pos = p;
+                    } else if (topAct.ability == ABILITY_ID::BUILD_ASSIMILATOR) {
+                        UnitWrappers vespenes = UnitManager::getVespene();
+                        std::vector<float> dist;
+                        for (int v = 0; v < vespenes.size(); v ++) {
+                            
+                            if (((Vespene *)(vespenes[i]))->taken == 1) {
+                                vespenes.erase(vespenes.begin() + i);
+                                v--;
+                                continue;
+                            }
+                            float nexdist = -1;
+                            for (auto n : UnitManager::get(UNIT_TYPEID::PROTOSS_NEXUS)) {
+                                float d = Distance2D(n->pos(agent), vespenes[i]->pos(agent));
+                                if (nexdist == -1 || d < nexdist) {
+                                    nexdist = d;
+                                }
+                            }
+                            dist.push_back(nexdist);
+                        }
+                    } else if (topAct.ability == ABILITY_ID::BUILD_NEXUS) {
+
                     } else {
                         if (Aux::requiresPylon(topAct.ability)) {
                             if (UnitManager::get(UNIT_TYPEID::PROTOSS_PYLON).size() == 0) {

@@ -36,6 +36,17 @@ public:
         return false;
     }
 
+    static void loadAbilities(Agent *agent);
+
+    bool checkAbility(AbilityID ability) {
+        for (int i = 0; i < abilities.abilities.size(); i++) {
+            if (ability == abilities.abilities[i].ability_id) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     virtual ~UnitWrapper();
 };
 
@@ -169,6 +180,7 @@ UnitWrapper::UnitWrapper(const Unit *unit) : self(unit->tag), type(unit->unit_ty
         UnitManager::enemies[type].push_back(this);
     }
     ignoreFrames = 0;
+    abilities = AvailableAbilities();
 }
 
 Point2D UnitWrapper::pos(Agent *agent) {
@@ -201,6 +213,47 @@ inline const Unit* UnitWrapper::get(Agent *agent) {
 
 bool UnitWrapper::equals(UnitWrapper *wrapper) {
     return (wrapper->self == self) && (wrapper->type == type);
+}
+
+void UnitWrapper::loadAbilities(Agent *agent) {
+    Units all = agent->Observation()->GetUnits(Unit::Alliance::Self);
+    //Units u;
+    //vector<UnitWrapper *> probes = UnitManager::get(UNIT_TYPEID::PROTOSS_PROBE);
+    // for (int i = 0; i < probes.size(); i++) {
+    //     const Unit *unit = agent->Observation()->GetUnit(probes[i]->self);
+    //     if (unit != nullptr) {
+    //         u.push_back(unit);
+    //     } else {
+    //         probes.erase(probes.begin() + i);
+    //         i --;
+    //     }
+    // }
+    //vector<AvailableAbilities> allAb = agent->Query()->GetAbilitiesForUnits(u);
+    //for (int i = 0; i < allAb.size(); i++) {
+    //    if (probes[i]->self == allAb[i].unit_tag) {
+    //        ((Probe *)probes[i])->abilities = allAb[i];
+    //    } else {
+    //        printf("ABILITY ASSIGNMENT ERROR\n");
+    //    }
+    //}
+    vector<AvailableAbilities> allAb = agent->Query()->GetAbilitiesForUnits(all);
+    for (AvailableAbilities abil : allAb) {
+        if (abil.unit_tag != NullTag) {
+            UnitWrapper* u = UnitManager::find(abil.unit_type_id, abil.unit_tag);
+            if (u == nullptr) {
+                continue;
+            }
+            u->abilities = abil;
+            //if (abil.abilities.size() == 0) {
+            //    u->abilities = AvailableAbilities();
+            //    u->abilities.unit_tag = abil.unit_tag;
+            //    u->abilities.unit_type_id = abil.unit_type_id;
+            //} else {
+            //    u->abilities = abil;
+            //}
+        }
+            
+    }
 }
 
 UnitWrapper::~UnitWrapper() {
