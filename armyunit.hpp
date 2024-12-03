@@ -6,6 +6,7 @@
 #include "constants.h"
 #include "profiler.hpp"
 #include "unit.hpp"
+#include "spacialhashgrid.hpp"
 
 constexpr int BERTH = 1;
 
@@ -350,99 +351,98 @@ public:
                     UnitWrappers dangerous = UnitWrappers();
                     std::vector<float> dangerousPriority = std::vector<float>();
                     int engaged = false;
-                    for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
-                        auto all = it->second;
-                        for (auto it2 = all.begin(); it2 != all.end(); it2++) {
-                            if ((*it2)->pos(agent) == Point2D{0, 0}) {
-                                continue;
-                            }
-                            const Unit* enemy = (*it2)->get(agent);
-                            // auto parg = Profiler(strprintf("sE - perEnemy %s",
-                            // UnitTypeToName(enemies[e]->unit_type)));
-                            //auto parg = Profiler("sE_pE");
-                            UnitTypeData enemy_stats =
-                                Aux::getStats((*it2)->type, agent);  // allData.at(static_cast<uint32_t>(enemies[e]->unit_type));
-                            for (int i = 0; i < enemy_stats.weapons.size(); i++) {
-                                //auto pre = Profiler("sE_pEW");
-                                bool withinRange = ((Distance2D(wrapGet->pos, (*it2)->pos(agent)) - wrapGet->radius -
-                                                     (*it2)->radius) < enemy_stats.weapons[i].range + berthRadius);
-                                if (withinRange && Aux::hitsUnit(wrapGet, enemy_stats.weapons[i].type)) {
-                                    // inRange.push_back(enemies[e]);
-                                    bool inserted = false;
-                                    float priority = priorityAvoid(wrap->type, (*it2)->type, enemy_stats.weapons[i], agent);
-                                    if (dangerous.size() == 0) {
+                    auto profileStuff = new Profiler("checkEnemies");
+                    UnitWrappers enemi = SpacialHash::findInRadius(wrap->pos(agent), 14, agent);
+                    for (auto it2 = enemi.begin(); it2 != enemi.end(); it2++) {
+                        if ((*it2)->pos(agent) == Point2D{0, 0}) {
+                            continue;
+                        }
+                        const Unit *enemy = (*it2)->get(agent);
+                        // auto parg = Profiler(strprintf("sE - perEnemy %s",
+                        // UnitTypeToName(enemies[e]->unit_type)));
+                        // auto parg = Profiler("sE_pE");
+                        UnitTypeData enemy_stats = Aux::getStats(
+                            (*it2)->type, agent);  // allData.at(static_cast<uint32_t>(enemies[e]->unit_type));
+                        for (int i = 0; i < enemy_stats.weapons.size(); i++) {
+                            // auto pre = Profiler("sE_pEW");
+                            bool withinRange = ((Distance2D(wrapGet->pos, (*it2)->pos(agent)) - wrapGet->radius -
+                                                 (*it2)->radius) < enemy_stats.weapons[i].range + berthRadius);
+                            if (withinRange && Aux::hitsUnit(wrapGet, enemy_stats.weapons[i].type)) {
+                                // inRange.push_back(enemies[e]);
+                                bool inserted = false;
+                                float priority = priorityAvoid(wrap->type, (*it2)->type, enemy_stats.weapons[i], agent);
+                                if (dangerous.size() == 0) {
+                                    inserted = true;
+                                    dangerous.push_back(*it2);
+                                    dangerousPriority.push_back(priority);
+                                    // printf("%s %d\n", AbilityTypeToName(currentAction.ability),
+                                    // currentAction.index);
+                                }
+                                for (int d = 0; d < dangerous.size(); d++) {
+                                    if (dangerousPriority[d] < priority) {
+                                        dangerous.insert(dangerous.begin() + d, *it2);
+                                        dangerousPriority.insert(dangerousPriority.begin() + d, priority);
                                         inserted = true;
-                                        dangerous.push_back(*it2);
-                                        dangerousPriority.push_back(priority);
+                                        break;
+                                    }
+                                }
+                                if (inserted == false) {
+                                    dangerous.push_back(*it2);
+                                    dangerousPriority.push_back(priority);
+                                }
+                                break;
+                            }
+                        }
+                        if (wrapGet->weapon_cooldown == 0 && enemy != nullptr) {
+                            // auto pdd = Profiler("sE_aMW");
+                            for (int i = 0; i < unit_stats.weapons.size(); i++) {
+                                // auto pdd = Profiler("sE_pMW");
+                                bool withinRange = ((Distance2D(wrapGet->pos, (*it2)->pos(agent)) - wrapGet->radius -
+                                                     (*it2)->radius) < unit_stats.weapons[i].range);
+                                if (withinRange && Aux::hitsUnit(enemy, unit_stats.weapons[i].type)) {
+                                    // inRange.push_back(enemies[e]);
+                                    // auto *pdd = new Profiler("sE_pMW_I");
+                                    bool inserted = false;
+                                    engaged = true;
+                                    float priority = priorityAttack(wrap->type, unit_stats.weapons[i], enemy, agent);
+                                    // delete pdd;
+                                    // auto *pddads32 = new Profiler("sE_pMW_I1");
+                                    if (inRange.size() == 0) {
+                                        inserted = true;
+                                        inRange.push_back(*it2);
+                                        inRangePriority.push_back(priority);
                                         // printf("%s %d\n", AbilityTypeToName(currentAction.ability),
                                         // currentAction.index);
                                     }
-                                    for (int d = 0; d < dangerous.size(); d++) {
-                                        if (dangerousPriority[d] < priority) {
-                                            dangerous.insert(dangerous.begin() + d, *it2);
-                                            dangerousPriority.insert(dangerousPriority.begin() + d, priority);
+                                    // delete pddads32;
+                                    // auto *pddads33 = new Profiler("sE_pMW_I2");
+                                    for (int d = 0; d < inRange.size(); d++) {
+                                        if (inRangePriority[d] < priority) {
+                                            inRange.insert(inRange.begin() + d, *it2);
+                                            inRangePriority.insert(inRangePriority.begin() + d, priority);
                                             inserted = true;
                                             break;
                                         }
                                     }
+                                    // delete pddads33;
+                                    // auto *pddad4s = new Profiler("sE_pMW_I3");
                                     if (inserted == false) {
-                                        dangerous.push_back(*it2);
-                                        dangerousPriority.push_back(priority);
+                                        inRange.push_back(*it2);
+                                        inRangePriority.push_back(priority);
                                     }
+
+                                    if (std::find(relevantEnemies.begin(), relevantEnemies.end(), *it2) ==
+                                        relevantEnemies.end()) {
+                                        relevantEnemies.push_back(*it2);
+                                    }
+
+                                    numArmyEngaged++;
                                     break;
-                                }
-                            }
-                            if (wrapGet->weapon_cooldown == 0 && enemy != nullptr) {
-                                //auto pdd = Profiler("sE_aMW");
-                                for (int i = 0; i < unit_stats.weapons.size(); i++) {
-                                    //auto pdd = Profiler("sE_pMW");
-                                    bool withinRange = ((Distance2D(wrapGet->pos, (*it2)->pos(agent)) - wrapGet->radius -
-                                                         (*it2)->radius) < unit_stats.weapons[i].range);
-                                    if (withinRange && Aux::hitsUnit(enemy, unit_stats.weapons[i].type)) {
-                                        // inRange.push_back(enemies[e]);
-                                        //auto *pdd = new Profiler("sE_pMW_I");
-                                        bool inserted = false;
-                                        engaged = true;
-                                        float priority =
-                                            priorityAttack(wrap->type, unit_stats.weapons[i], enemy, agent);
-                                        //delete pdd;
-                                        //auto *pddads32 = new Profiler("sE_pMW_I1");
-                                        if (inRange.size() == 0) {
-                                            inserted = true;
-                                            inRange.push_back(*it2);
-                                            inRangePriority.push_back(priority);
-                                            // printf("%s %d\n", AbilityTypeToName(currentAction.ability),
-                                            // currentAction.index);
-                                        }
-                                        //delete pddads32;
-                                        //auto *pddads33 = new Profiler("sE_pMW_I2");
-                                        for (int d = 0; d < inRange.size(); d++) {
-                                            if (inRangePriority[d] < priority) {
-                                                inRange.insert(inRange.begin() + d, *it2);
-                                                inRangePriority.insert(inRangePriority.begin() + d, priority);
-                                                inserted = true;
-                                                break;
-                                            }
-                                        }
-                                        //delete pddads33;
-                                        //auto *pddad4s = new Profiler("sE_pMW_I3");
-                                        if (inserted == false) {
-                                            inRange.push_back(*it2);
-                                            inRangePriority.push_back(priority);
-                                        }
-
-                                        if (std::find(relevantEnemies.begin(), relevantEnemies.end(), *it2) ==
-                                            relevantEnemies.end()) {
-                                            relevantEnemies.push_back(*it2);
-                                        }
-
-                                        numArmyEngaged++;
-                                        break;
-                                    }
                                 }
                             }
                         }
                     }
+                    delete profileStuff;
                     if (engaged) {
                         numArmyEngaged++;
                     }

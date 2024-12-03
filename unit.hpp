@@ -47,10 +47,25 @@ public:
         return false;
     }
 
+    bool operator==(const UnitWrapper &u) {
+        return u.self == self;
+    }
+
     virtual ~UnitWrapper();
 };
 
+class UnitWrapperHash {
+public:
+    // We use predefined hash functions of strings
+    // and define our hash function as XOR of the
+    // hash values.
+    size_t operator()(const UnitWrapper &p) const {
+        return p.self;
+    }
+};
+
 using UnitWrappers = vector<UnitWrapper*>;
+using UnitWrapperSet = vector<UnitWrapper*>;
 
 namespace UnitManager {
     map<UnitTypeID, UnitWrappers> units;

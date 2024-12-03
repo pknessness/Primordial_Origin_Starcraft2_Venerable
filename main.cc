@@ -488,10 +488,14 @@ public:
         int mapWidth = Observation()->GetGameInfo().width;
         int mapHeight = Observation()->GetGameInfo().height;
         SpacialHash::grid = new map2d<UnitWrappers>(mapWidth, mapHeight, true);
+        SpacialHash::gridEnemy = new map2d<UnitWrappers>(mapWidth, mapHeight, true);
         Aux::buildingBlocked = new map2d<int8_t>(mapWidth, mapHeight, true);
         Aux::influenceMap = new map2d<int8_t>(mapWidth, mapHeight, true);
         Aux::influenceMapEnemy = new map2d<int8_t>(mapWidth, mapHeight, true);
         path_zhang_suen = new map2d<int8_t>(mapWidth, mapHeight, true);
+
+        SpacialHash::initGrid(this);
+        SpacialHash::initGridEnemy(this);
 
         for (int i = 0; i < path_zhang_suen->width(); i++) {
             for (int j = 0; j < path_zhang_suen->height(); j++) {
@@ -708,7 +712,7 @@ public:
     //! gathering observation state.
     virtual void OnStep() final {
         Profiler onStepProfiler("onStep");
-        onStepProfiler.disable();
+        //onStepProfiler.disable();
 
         Macro::execute(this);
 
@@ -730,6 +734,10 @@ public:
         SpacialHash::updateGrid(this);
 
         onStepProfiler.midLog("SpacialHashUpdate");
+
+        SpacialHash::updateGridEnemy(this);
+
+        onStepProfiler.midLog("SpacialHashUpdateEnemy");
 
         manageArmy();
 
