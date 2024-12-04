@@ -352,7 +352,7 @@ public:
                     std::vector<float> dangerousPriority = std::vector<float>();
                     int engaged = false;
                     auto profileStuff = new Profiler("checkEnemies");
-                    UnitWrappers enemi = SpacialHash::findInRadius(wrap->pos(agent), 14, agent);
+                    UnitWrappers enemi = SpacialHash::findInRadiusEnemy(wrap->pos(agent), 14, agent);
                     for (auto it2 = enemi.begin(); it2 != enemi.end(); it2++) {
                         if ((*it2)->pos(agent) == Point2D{0, 0}) {
                             continue;

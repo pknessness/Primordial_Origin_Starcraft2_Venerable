@@ -51,6 +51,10 @@ public:
         return u.self == self;
     }
 
+    bool operator<(const UnitWrapper &u) {
+        return u.self < self;
+    }
+
     virtual ~UnitWrapper();
 };
 
@@ -65,7 +69,7 @@ public:
 };
 
 using UnitWrappers = vector<UnitWrapper*>;
-using UnitWrapperSet = vector<UnitWrapper*>;
+using UnitWrapperSet = set<UnitWrapper*>;
 
 namespace UnitManager {
     map<UnitTypeID, UnitWrappers> units;

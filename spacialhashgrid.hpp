@@ -59,6 +59,7 @@ void updateGrid(Agent *agent) {
                     if (activate) {
                         //imRef(grid, (int)(i + x), (int)(j + y)) = UnitWrappers();
                         imRef(grid, (int)(i + x), (int)(j + y)).push_back(*it2);
+
                     }
                 }
             }
@@ -92,7 +93,12 @@ UnitWrappers findInRadius(Point2D pos, float radius, Agent *agent) {
             }
             if (activate) {
                 UnitWrappers cell = imRef(grid, (int)(i + x), (int)(j + y));
-                found.insert(found.end(), cell.begin(), cell.end());
+                for (auto it = cell.begin(); it != cell.end(); it++) {
+                    if (std::find(found.begin(), found.end(), *it) == found.end()) {
+                        found.push_back(*it);
+                    }
+                }
+                //found.insert(found.end(), cell.begin(), cell.end());
                 //if (find(found.begin(), found.end()))
             }
         }
@@ -118,7 +124,7 @@ void resetGridEnemy(Agent *agent) {
 
 void updateGridEnemy(Agent *agent) {
     resetGridEnemy(agent);
-    for (auto it = UnitManager::units.begin(); it != UnitManager::units.end(); it++) {
+    for (auto it = UnitManager::enemies.begin(); it != UnitManager::enemies.end(); it++) {
         for (auto it2 = it->second.begin(); it2 != it->second.end(); it2++) {
             Point2D p = (*it2)->pos(agent);
             float size = (*it2)->radius;
@@ -143,7 +149,7 @@ void updateGridEnemy(Agent *agent) {
                             break;
                         }
                     }
-                    if (activate) {
+                    if (activate && (*it2)->pos(agent) != Point2D{0,0}) {
                         //imRef(gridEnemy, (int)(i + x), (int)(j + y)) = UnitWrappers();
                         imRef(gridEnemy, (int)(i + x), (int)(j + y)).push_back(*it2);
                     }
@@ -179,7 +185,11 @@ UnitWrappers findInRadiusEnemy(Point2D pos, float radius, Agent *agent) {
             }
             if (activate) {
                 UnitWrappers cell = imRef(gridEnemy, (int)(i + x), (int)(j + y));
-                found.insert(found.end(), cell.begin(), cell.end());
+                for (auto it = cell.begin(); it != cell.end(); it++) {
+                    if (std::find(found.begin(), found.end(), *it) == found.end()) {
+                        found.push_back(*it);
+                    }
+                }
             }
         }
     }

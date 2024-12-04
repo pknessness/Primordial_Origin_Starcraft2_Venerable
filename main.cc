@@ -229,6 +229,8 @@ public:
 
                 if (imRef(SpacialHash::grid, w, h).size() != 0) {
                         c = {20, 200, 210};
+                } else if (imRef(SpacialHash::gridEnemy, w, h).size() != 0) {
+                        c = {210, 200, 20};
                 }
 
                 if (0 || !(c.r == 255 && c.g == 255 && c.b == 255)) {
